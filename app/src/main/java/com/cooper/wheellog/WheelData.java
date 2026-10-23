@@ -1,5 +1,7 @@
 package com.cooper.wheellog;
 
+import com.cooper.wheellog.helmet.HelmetLink;
+
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
@@ -226,6 +228,24 @@ public class WheelData {
 
     public int getSpeed() {
         return (int) Math.round(mSpeed / 10.0);
+    }
+
+    // Шлем (CJ-Helmet): скорость и фазный ток со знаком, как их отдаёт колесо (0.01 км/ч, 0.01 А).
+    // Адаптер Veteran задаёт их до настройки «отрицательные значения», для остальных колёс - обычные.
+    private Integer mHelmetSpeedRaw = null;
+    private Integer mHelmetCurrentRaw = null;
+
+    public void setHelmetRaw(int speed, int phaseCurrent) {
+        mHelmetSpeedRaw = speed;
+        mHelmetCurrentRaw = phaseCurrent;
+    }
+
+    public int getHelmetSpeedRaw() {
+        return mHelmetSpeedRaw != null ? mHelmetSpeedRaw : mSpeed;
+    }
+
+    public int getHelmetCurrentRaw() {
+        return mHelmetCurrentRaw != null ? mHelmetCurrentRaw : mPhaseCurrent;
     }
 
     public void setSpeed(int speed) {
@@ -1092,6 +1112,8 @@ public class WheelData {
         setTopSpeed(mSpeed);
         updateVoltageSag();
         setMaxTemp(mTemperature);
+
+        HelmetLink.onWheelData(this);  // шлем: пакет на каждое обновление, не чаще 20 раз в секунду
 
         Intent intent = new Intent(Constants.ACTION_WHEEL_DATA_AVAILABLE);
 

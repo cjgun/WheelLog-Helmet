@@ -212,6 +212,7 @@ public class VeteranAdapter extends BaseAdapter {
                     }
                 } else battery = 1; // for new wheels, set 1% by default
 
+                wd.setHelmetRaw(speed, phaseCurrent);  // шлем: со знаком, до настройки отрицательных значений
                 if (veteranNegative == 0) {
                     speed = Math.abs(speed);
                     phaseCurrent = Math.abs(phaseCurrent);

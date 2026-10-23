@@ -18,6 +18,7 @@ class WheelLog : Application() {
             Timber.plant(Timber.DebugTree(), FileLoggingTree(applicationContext))
         }
         WheelData.initiate()
+        com.cooper.wheellog.helmet.HelmetLink.init(this)
 
         // YandexMetrica.
 //        if (BuildConfig.metrica_api.isNotEmpty()) {

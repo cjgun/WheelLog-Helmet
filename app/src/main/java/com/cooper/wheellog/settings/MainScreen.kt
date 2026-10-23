@@ -27,6 +27,7 @@ enum class SettingsScreenEnum(@StringRes val title: Int) {
     Watch(title = R.string.watch_settings_title),
     Wheel(title = R.string.wheel_settings_title),
     Trip(title = R.string.trip_settings_title),
+    Helmet(title = R.string.helmet_settings_title),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -108,6 +109,9 @@ fun mainScreen(
             }
             composable(route = SettingsScreenEnum.Trip.name) {
                 tripScreen()
+            }
+            composable(route = SettingsScreenEnum.Helmet.name) {
+                helmetScreen()
             }
         }
     }

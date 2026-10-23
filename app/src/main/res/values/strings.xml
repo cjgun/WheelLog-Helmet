@@ -696,4 +696,5 @@
     <string name="create_test_log">Create new test log</string>
     <string name="permisson_error">Permission error</string>
     <string name="log_location_permisson_error_text">Please check permission settings.</string>
+    <string name="helmet_settings_title" translatable="false">Шлем</string>
 </resources>

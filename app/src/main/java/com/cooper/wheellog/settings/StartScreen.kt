@@ -67,6 +67,13 @@ fun startScreen(
             onSelect(SettingsScreenEnum.Application.name)
         }
         clickablePref(
+            name = stringResource(R.string.helmet_settings_title),
+            themeIcon = ThemeIconEnum.SettingsWheel,
+            desc = "CJ-Helmet: стоп, разгон, поворот",
+        ) {
+            onSelect(SettingsScreenEnum.Helmet.name)
+        }
+        clickablePref(
             name = stringResource(R.string.logs_settings_title),
             themeIcon = ThemeIconEnum.SettingsLog,
         ) {
