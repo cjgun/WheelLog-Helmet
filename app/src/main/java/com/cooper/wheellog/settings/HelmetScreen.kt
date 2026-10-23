@@ -199,10 +199,9 @@ private fun slider(name: String, value: Float, min: Float, max: Float, step: Flo
             Text(name, Modifier.weight(1f))
             Text(fmt.format(v), fontWeight = FontWeight.Bold)
         }
-        val steps = if (max > min) (((max - min) / step).roundToInt() - 1).coerceIn(0, 300) else 0
+        // без отметок шагов: на 300 точках они сливаются в полосу; шаг даёт округление
         Slider(value = v, onValueChange = { v = (Math.round(it / step) * step).coerceIn(min, max) },
-            onValueChangeFinished = { onDone(v) }, valueRange = min..maxOf(max, min + step),
-            steps = if (steps <= 300) steps else 0)
+            onValueChangeFinished = { onDone(v) }, valueRange = min..maxOf(max, min + step))
         if (hint.isNotEmpty()) Text(hint, style = MaterialTheme.typography.bodySmall)
     }
 }
