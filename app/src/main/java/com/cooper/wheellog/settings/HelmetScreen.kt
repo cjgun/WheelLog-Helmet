@@ -126,7 +126,15 @@ private fun connectionPart() {
 private fun settingsPart() {
     val raw = edit.value
     if (raw == null) {
-        card("Настройки шлема") { Text("Появятся, когда шлем будет на связи") }
+        card("Настройки шлема") {
+            Text("Появятся, когда шлем будет на связи")
+            // только отладочная сборка: посмотреть экран без шлема (эмулятор без Bluetooth)
+            if (com.cooper.wheellog.BuildConfig.DEBUG) TextButton(onClick = {
+                edit.value = "0328ff00fa0032000000280 01e0087000f0037005000780000c8a00fd007fa000800"
+                    .replace(" ", "").chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                editRev.intValue++
+            }) { Text("Пример настроек (отладка)") }
+        }
         return
     }
     val c = HelmetConfig(raw)
