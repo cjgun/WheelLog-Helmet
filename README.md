@@ -94,3 +94,18 @@ mode: 0 нет связи, 1 норма, 2 торможение, 3 разгон;
 
 115200, команды: `l` `r` `b` `o` - поворот лево, право, оба, выкл; `c` - режим разметки вкл/выкл;
 `d` - настройки по умолчанию; `s` - состояние.
+
+## Приложение (этап 2)
+
+Форк WheelLog с модулем «Шлем»: git на NL `/root/helmet-app`, ветка `shlem`
+(исходник https://github.com/Wheellog/Wheellog.Android, f44e39e). Пакет `com.cooper.wheellog.helmet`,
+имя «WheelLog Шлем», ставится рядом с WheelLog из Play.
+
+- `app/.../helmet/HelmetLink.kt` - BLE к шлему, пакет v1 на каждое обновление WheelData, не чаще 20/с.
+- `app/.../settings/HelmetScreen.kt` - экран «Шлем» в настройках; ширина от 600 dp (развёрнутый Fold) - две колонки.
+- `VeteranAdapter.java` - скорость и фазный ток со знаком до настройки «отрицательные значения» (`WheelData.setHelmetRaw`).
+- Синхронизации с electro.club нет: ключ `ec_accessToken` есть только в официальной сборке.
+
+Сборка на MiniGUN: перенести `git archive shlem | tar x` в `/opt/helmet/wheellog`, затем `/opt/helmet/sobrat-apk.sh`
+(release, подпись `/opt/helmet/android/helmet.jks`, пароль `apk=` в `/opt/helmet/sekrety.txt`).
+Раздача: http://10.10.0.16/dl/wheellog-shlem.apk. Эмулятор для проверки экрана: AVD `tel`, `tools/emu_tap.py`.
