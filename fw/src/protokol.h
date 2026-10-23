@@ -20,7 +20,7 @@ struct __attribute__((packed)) DataV1 {
 static_assert(sizeof(DataV1) == 8, "DataV1");
 
 // Настройки, хранятся в NVS. Запись в characteristic config - вся структура целиком.
-#define CONFIG_VER 1
+#define CONFIG_VER 2
 struct __attribute__((packed)) Config {
   uint8_t ver;            // = CONFIG_VER
   uint8_t bright_tail;    // габарит, 0-255
@@ -39,9 +39,13 @@ struct __attribute__((packed)) Config {
   uint8_t accel_rgb[3];   // цвет разгона
   uint8_t turn_sec;       // поворот гаснет сам через, с
   uint16_t limit_ma;      // предел тока ленты, мА
+  // v2: торможение по наклону. Ездок откидывается назад раньше, чем падает скорость
+  // (логи WheelLog 20 и 22.10: наклон опережает замедление на ~0.4 с).
+  uint16_t brake_tilt;    // наклон назад сверх среднего, 0.01 градуса (0 - выкл)
+  uint8_t tilt_avg_s;     // среднее наклона за, с (убирает уклон дороги)
 };
 
-static_assert(sizeof(Config) == 30, "Config");
+static_assert(sizeof(Config) == 33, "Config");
 
 #define CFG_CURRENT_INVERT 0x01
 #define CFG_FRONT_WHITE    0x02

@@ -21,8 +21,8 @@ static Config cfg;
 static const Config CFG_DEFAULT = {
   CONFIG_VER, 40, 255, 0,
   250,    // smooth_ms
-  40,     // brake_decel: 4 км/ч в секунду
-  0,      // brake_current: знак тока на Sherman L не проверен, по току пока не тормозим
+  50,     // brake_decel: 5 км/ч в секунду (по логам 3-5 стопов в минуту езды)
+  0,      // brake_current: WheelLog отдаёт ток по модулю, по току не тормозим
   40,     // accel: 4 км/ч в секунду
   30,     // min_speed: 3 км/ч
   135,    // num_leds
@@ -30,6 +30,8 @@ static const Config CFG_DEFAULT = {
   {0, 200, 160},  // разгон - бирюзовый
   15,     // turn_sec
   2000,   // limit_ma
+  250,    // brake_tilt: 2.5 градуса назад сверх среднего
+  8,      // tilt_avg_s
 };
 
 static Adafruit_NeoPixel lenta(MAX_LEDS, PIN_LENTA, NEO_GRB + NEO_KHZ800);
@@ -45,7 +47,9 @@ static volatile float accelF = 0;       // сглаженное ускорени
 static volatile uint16_t packets = 0, bad = 0;
 static volatile uint8_t turn = T_OFF;
 static volatile uint32_t turnUntil = 0, turnStart = 0;
-static int16_t prevSpeed = 0, med[3] = {0, 0, 0};
+static volatile int16_t pitch = 0;
+static volatile float tiltAvg = 0;      // медленное среднее наклона, 0.01 градуса
+static int16_t prevSpeed = 0;
 static uint32_t prevT = 0;
 
 static Mode mode = M_NOSIGNAL;
@@ -59,7 +63,8 @@ static bool cfgValid(const Config &c) {
   return c.ver == CONFIG_VER && c.num_leds >= 1 && c.num_leds <= MAX_LEDS &&
          c.z_right <= c.z_back && c.z_back <= c.z_left && c.z_left <= c.z_front_left &&
          c.z_front_left <= c.num_leds && c.smooth_ms >= 20 && c.smooth_ms <= 2000 &&
-         c.turn_sec >= 1 && c.turn_sec <= 120 && c.limit_ma >= 100 && c.limit_ma <= 10000;
+         c.turn_sec >= 1 && c.turn_sec <= 120 && c.limit_ma >= 100 && c.limit_ma <= 10000 &&
+         c.tilt_avg_s >= 1 && c.tilt_avg_s <= 60;
 }
 
 static void cfgLoad() {
@@ -82,18 +87,18 @@ static void onData(const uint8_t *d, size_t n) {
   uint32_t dt = now - prevT;
   if (prevT == 0 || dt > 500) {
     accelF = 0;  // после перерыва ускорение не считаем по старой скорости
-    med[0] = med[1] = med[2] = v;
-    prevSpeed = v;
+    tiltAvg = p.pitch;
   } else if (dt > 0) {
-    // медиана трёх последних скоростей: одиночный выброс (кочка, сбой датчика) не даёт ускорения
-    med[0] = med[1]; med[1] = med[2]; med[2] = v;
-    int16_t m = max(min(med[0], med[1]), min(max(med[0], med[1]), med[2]));
-    float a = (m - prevSpeed) * 1000.0f / dt;
+    // Медианы нет: колесо шлёт 5 пакетов в секунду, скорость в логах гладкая,
+    // а медиана добавляла бы ещё пакет задержки
+    float a = (v - prevSpeed) * 1000.0f / dt;
     float k = (float)dt / (cfg.smooth_ms + dt);
     accelF = accelF + k * (a - accelF);
-    prevSpeed = m;
+    tiltAvg += (float)dt / (cfg.tilt_avg_s * 1000.0f + dt) * (p.pitch - tiltAvg);
   }
+  prevSpeed = v;
   prevT = now;
+  pitch = p.pitch;
   speed = p.speed;
   current = p.current;
   wheelFlags = p.flags;
@@ -155,9 +160,10 @@ class CfgCb : public NimBLECharacteristicCallbacks {
 
 // ---------- режим ----------
 static void updateMode(uint32_t now) {
-  int16_t spd, cur; float a; uint8_t fl; uint32_t lp;
+  int16_t spd, cur; float a, tilt; uint8_t fl; uint32_t lp;
   portENTER_CRITICAL(&mux);
   spd = abs(speed); cur = current; a = accelF; fl = wheelFlags; lp = lastPkt;
+  tilt = pitch - tiltAvg;  // в WheelLog наклон назад (торможение) положительный
   bool sgn = speed < 0;
   portEXIT_CRITICAL(&mux);
 
@@ -172,7 +178,9 @@ static void updateMode(uint32_t now) {
     bool keep = (mode == M_BRAKE);  // гистерезис: выход на 60% порога
     float thrA = keep ? cfg.brake_decel * 0.6f : cfg.brake_decel;
     int thrI = keep ? cfg.brake_current * 6 / 10 : cfg.brake_current;
-    bool brake = (cfg.brake_decel && a <= -thrA) || (byCur && regen >= thrI);
+    float thrT = keep ? cfg.brake_tilt * 0.6f : cfg.brake_tilt;
+    bool byTilt = cfg.brake_tilt && spd >= 50 && tilt >= thrT;  // наклон только на ходу, от 5 км/ч
+    bool brake = (cfg.brake_decel && a <= -thrA) || (byCur && regen >= thrI) || byTilt;
     float thrAcc = mode == M_ACCEL ? cfg.accel * 0.6f : cfg.accel;
     bool acc = cfg.accel && spd >= cfg.min_speed && a >= thrAcc;
     m = brake ? M_BRAKE : acc ? M_ACCEL : M_NORM;

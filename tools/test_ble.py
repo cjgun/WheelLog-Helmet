@@ -24,20 +24,20 @@ def on_state(_, d):
     state.update(mode=m, turn=t, a=a, v=v, packets=pk, bad=bad, ma=ma, t=time.time())
 
 
-def paket(v_kmh, cur_a=0.0, flags=1, ver=1):
-    return struct.pack('<BBhhh', ver, flags, round(v_kmh * 10), round(cur_a * 10), 0)
+def paket(v_kmh, cur_a=0.0, flags=1, ver=1, pitch=0.0):
+    return struct.pack('<BBhhh', ver, flags, round(v_kmh * 10), round(cur_a * 10), round(pitch * 100))
 
 
-async def ezda(c, v0, v1, sek, hz=20):
-    """Плавно менять скорость от v0 до v1 за sek секунд, hz пакетов в секунду."""
+async def ezda(c, v0, v1, sek, hz=5, pitch=0.0):
+    """Плавно менять скорость от v0 до v1 за sek секунд; 5 пакетов в секунду, как шлёт Sherman L."""
     n = int(sek * hz)
     for i in range(n + 1):
-        await c.write_gatt_char(U_DATA, paket(v0 + (v1 - v0) * i / n), response=False)
+        await c.write_gatt_char(U_DATA, paket(v0 + (v1 - v0) * i / n, pitch=pitch), response=False)
         await asyncio.sleep(1 / hz)
 
 
 def proverka(imya, ok, podrobno=''):
-    print(f"{'OK  ' if ok else 'FAIL'} {imya} {podrobno}")
+    print(time.strftime("%H:%M:%S"), f"{'OK  ' if ok else 'FAIL'} {imya} {podrobno}")
     if not ok:
         oshibki.append(imya)
 
@@ -66,11 +66,26 @@ async def main():
         proverka('ускорение 10 км/ч/с -> разгон', state.get('mode') == 3, f"{REZHIM.get(state.get('mode'))} a={state.get('a')}")
 
         await ezda(c, 20, 20, 1.5)
-        # одиночная кочка: скачок скорости на один пакет не должен давать стоп
-        await c.write_gatt_char(U_DATA, paket(17), response=False)
-        await asyncio.sleep(0.05)
+        # одиночная кочка: скачок скорости на один пакет (0.2 с) не должен давать стоп
+        t_kochka = time.time()
+        modes = []
+        await c.write_gatt_char(U_DATA, paket(19), response=False)
+        for _ in range(8):
+            await asyncio.sleep(0.1)
+            modes.append(state.get('mode'))
         await ezda(c, 20, 20, 0.5)
-        proverka('кочка (-3 км/ч на один пакет) -> не стоп', state.get('mode') == 1, REZHIM.get(state.get('mode')))
+        proverka('кочка (-1 км/ч на один пакет) -> не стоп', 2 not in modes, str(modes))
+
+        # наклон назад на ровной скорости - стоп раньше замедления
+        await ezda(c, 20, 20, 2)
+        await ezda(c, 20, 20, 0.6, pitch=3.0)
+        proverka('наклон назад 3° -> торможение', state.get('mode') == 2, REZHIM.get(state.get('mode')))
+        await ezda(c, 20, 20, 1.5)
+        proverka('наклон вернулся -> норма', state.get('mode') == 1, REZHIM.get(state.get('mode')))
+        # долгий подъём: постоянный наклон уходит в среднее и стоп гаснет
+        await ezda(c, 20, 20, 12, pitch=3.0)
+        proverka('постоянный наклон 12 с (уклон) -> норма', state.get('mode') == 1, REZHIM.get(state.get('mode')))
+        await ezda(c, 20, 20, 12)
 
         # колесо отвалилось у телефона (flags=0)
         for _ in range(5):
