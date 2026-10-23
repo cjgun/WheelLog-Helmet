@@ -20,7 +20,7 @@ struct __attribute__((packed)) DataV1 {
 static_assert(sizeof(DataV1) == 8, "DataV1");
 
 // Настройки, хранятся в NVS. Запись в characteristic config - вся структура целиком.
-#define CONFIG_VER 2
+#define CONFIG_VER 3
 struct __attribute__((packed)) Config {
   uint8_t ver;            // = CONFIG_VER
   uint8_t bright_tail;    // габарит, 0-255
@@ -43,9 +43,14 @@ struct __attribute__((packed)) Config {
   // (логи WheelLog 20 и 22.10: наклон опережает замедление на ~0.4 с).
   uint16_t brake_tilt;    // наклон назад сверх среднего, 0.01 градуса (0 - выкл)
   uint8_t tilt_avg_s;     // среднее наклона за, с (убирает уклон дороги)
+  // v3
+  uint8_t strip_type;     // порядок цветов: 0 GRB (WS2812), 1 RGB, 2 BRG, 3 GRBW (SK6812 RGBW), 4 RGBW
 };
 
-static_assert(sizeof(Config) == 33, "Config");
+static_assert(sizeof(Config) == 34, "Config");
+// Размер config прошлых версий: новые поля только дописываются в конец,
+// старые настройки переносятся при обновлении прошивки
+static const uint8_t CONFIG_SIZE[] = {0, 30, 33, 34};
 
 #define CFG_CURRENT_INVERT 0x01
 #define CFG_FRONT_WHITE    0x02

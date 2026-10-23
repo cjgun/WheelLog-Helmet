@@ -1,0 +1,5 @@
+// Образец. Настоящий sekrety.h создаётся на MiniGUN: /opt/helmet/tools/sekrety.py
+#pragma once
+#define WIFI_SSID "сеть"
+#define WIFI_PASS "пароль"
+#define OTA_PASS  "пароль обновления"

@@ -8,7 +8,9 @@
 #include <WiFi.h>
 #include <esp_now.h>
 #include <esp_wifi.h>
+#include <ArduinoOTA.h>
 #include "protokol.h"
+#include "sekrety.h"  // WIFI_SSID, WIFI_PASS, OTA_PASS - создаётся на MiniGUN, в git нет
 
 #define PIN_LENTA   18     // вывод данных ленты - менять только здесь
 #define PIN_PLATA   8      // RGB-светодиод на плате nanoESP32-C6
@@ -16,6 +18,7 @@
 #define TIMEOUT_MS  1000   // нет пакетов дольше - режим «нет связи»
 #define HOLD_MS     300    // стоп и разгон держатся не меньше, против дребезга на кочках
 #define ESPNOW_CH   1
+#define WIFI_AFTER_MS 30000  // телефона нет столько - шлем дома, подключаемся к Wi-Fi для обновления
 
 static Config cfg;
 static const Config CFG_DEFAULT = {
@@ -32,9 +35,13 @@ static const Config CFG_DEFAULT = {
   2000,   // limit_ma
   250,    // brake_tilt: 2.5 градуса назад сверх среднего
   8,      // tilt_avg_s
+  0,      // strip_type: GRB
 };
+static const neoPixelType STRIP_TYPES[] = {NEO_GRB, NEO_RGB, NEO_BRG, NEO_GRBW, NEO_RGBW};
+#define STRIP_TYPES_N (sizeof(STRIP_TYPES) / sizeof(STRIP_TYPES[0]))
 
 static Adafruit_NeoPixel lenta(MAX_LEDS, PIN_LENTA, NEO_GRB + NEO_KHZ800);
+static uint8_t stripType = 0;
 static Preferences nvs;
 static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -64,14 +71,21 @@ static bool cfgValid(const Config &c) {
          c.z_right <= c.z_back && c.z_back <= c.z_left && c.z_left <= c.z_front_left &&
          c.z_front_left <= c.num_leds && c.smooth_ms >= 20 && c.smooth_ms <= 2000 &&
          c.turn_sec >= 1 && c.turn_sec <= 120 && c.limit_ma >= 100 && c.limit_ma <= 10000 &&
-         c.tilt_avg_s >= 1 && c.tilt_avg_s <= 60;
+         c.tilt_avg_s >= 1 && c.tilt_avg_s <= 60 && c.strip_type < STRIP_TYPES_N;
 }
 
+// Сохранённые настройки старой версии: берём значения по умолчанию и кладём поверх старые поля
 static void cfgLoad() {
-  Config c;
+  uint8_t raw[sizeof(Config)];
   nvs.begin("helmet", false);
-  if (nvs.getBytes("cfg", &c, sizeof c) == sizeof c && cfgValid(c)) cfg = c;
-  else cfg = CFG_DEFAULT;
+  size_t n = nvs.getBytes("cfg", raw, sizeof raw);
+  Config c = CFG_DEFAULT;
+  if (n >= 1 && raw[0] >= 1 && raw[0] <= CONFIG_VER && n == CONFIG_SIZE[raw[0]]) {
+    memcpy(&c, raw, n);
+    c.ver = CONFIG_VER;
+  }
+  cfg = cfgValid(c) ? c : CFG_DEFAULT;
+  if (n != sizeof cfg || raw[0] != CONFIG_VER) nvs.putBytes("cfg", &cfg, sizeof cfg);
 }
 
 static void cfgSave() { nvs.putBytes("cfg", &cfg, sizeof cfg); }
@@ -229,11 +243,12 @@ static void drawCalibrate() {
 static void limitCurrent() {
   uint32_t sum = 0;
   uint8_t *px = lenta.getPixels();
-  for (int i = 0; i < cfg.num_leds * 3; i++) sum += px[i];
+  int nb = cfg.num_leds * (STRIP_TYPES[stripType] >> 6 == (STRIP_TYPES[stripType] >> 4 & 3) ? 3 : 4);  // RGBW - 4 байта на точку
+  for (int i = 0; i < nb; i++) sum += px[i];
   uint32_t idle = cfg.num_leds, ma = sum * 20 / 255 + idle;
   if (ma > cfg.limit_ma && sum) {
     uint32_t k = (cfg.limit_ma - min(idle, (uint32_t)cfg.limit_ma)) * 255 * 256 / (sum * 20);
-    for (int i = 0; i < cfg.num_leds * 3; i++) px[i] = px[i] * k >> 8;
+    for (int i = 0; i < nb; i++) px[i] = px[i] * k >> 8;
     ma = cfg.limit_ma;
   }
   lastMa = ma;
@@ -278,6 +293,43 @@ static void draw(uint32_t now) {
   rgbLedWrite(PIN_PLATA, r, g, b);
 }
 
+// ---------- Wi-Fi и обновление по воздуху ----------
+// Дома (телефон не подключён дольше WIFI_AFTER_MS) шлем подключается к домашней сети и ждёт
+// прошивку с MiniGUN (/opt/helmet/obnovit.sh). Подключился телефон - Wi-Fi отпускается,
+// ESP-NOW возвращается на свой канал. Настройки в NVS при обновлении сохраняются.
+static bool wifiOn = false, otaReady = false;
+static volatile bool gotIp = false;
+static uint32_t phoneSeen = 0;
+
+static void wifiTick(uint32_t now) {
+  if (connected) {
+    phoneSeen = now;
+    if (wifiOn) {
+      WiFi.disconnect(false, false);
+      esp_wifi_set_channel(ESPNOW_CH, WIFI_SECOND_CHAN_NONE);
+      wifiOn = false;
+      Serial.println("Wi-Fi: отпущен, телефон на связи");
+    }
+  } else if (!wifiOn && now - phoneSeen > WIFI_AFTER_MS) {
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    wifiOn = true;
+  }
+  if (gotIp && !otaReady) {
+    ArduinoOTA.setHostname("cj-helmet");
+    ArduinoOTA.setPassword(OTA_PASS);
+    ArduinoOTA.onStart([]() { lenta.clear(); lenta.show(); Serial.println("OTA: начало"); });
+    ArduinoOTA.onEnd([]() { Serial.println("OTA: готово, перезапуск"); });
+    ArduinoOTA.onError([](ota_error_t e) { Serial.printf("OTA: ошибка %u\n", e); });
+    ArduinoOTA.begin();
+    otaReady = true;
+  }
+  if (gotIp) {
+    gotIp = false;
+    Serial.printf("Wi-Fi: %s, обновление по воздуху ждёт\n", WiFi.localIP().toString().c_str());
+  }
+  if (otaReady) ArduinoOTA.handle();
+}
+
 // ---------- отладка ----------
 static void sendState(uint32_t now) {
   static uint32_t last = 0;
@@ -303,18 +355,23 @@ static void serialCmd() {
     else if (ch == 'o') setTurn(T_OFF);
     else if (ch == 'c') { cfg.flags ^= CFG_CALIBRATE; cfgSave(); chrConfig->setValue((uint8_t *)&cfg, sizeof cfg); }
     else if (ch == 'd') { cfg = CFG_DEFAULT; cfgSave(); chrConfig->setValue((uint8_t *)&cfg, sizeof cfg); }
-    else if (ch == 's') Serial.printf("режим %d поворот %d a=%.1f v=%d пакетов %u отброшено %u ток %u мА\n",
-                                      mode, turn, accelF / 10, speed, packets, bad, lastMa);
+    else if (ch == 's') Serial.printf("режим %d поворот %d a=%.1f v=%d пакетов %u отброшено %u ток %u мА, Wi-Fi %s, прошивка %s\n",
+                                      mode, turn, accelF / 10, speed, packets, bad, lastMa,
+                                      WiFi.isConnected() ? WiFi.localIP().toString().c_str() : "нет", __DATE__ " " __TIME__);
   }
 }
 
 void setup() {
   Serial.begin(115200);
   cfgLoad();
+  stripType = cfg.strip_type;
+  lenta.updateType(STRIP_TYPES[stripType] + NEO_KHZ800);
   lenta.begin();
   lenta.updateLength(cfg.num_leds);
 
   WiFi.mode(WIFI_STA);
+  WiFi.setHostname("cj-helmet");
+  WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) { gotIp = true; }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
   esp_wifi_set_channel(ESPNOW_CH, WIFI_SECOND_CHAN_NONE);
   if (esp_now_init() == ESP_OK) esp_now_register_recv_cb(onEspNow);
 
@@ -344,8 +401,14 @@ void loop() {
   static uint32_t lastDraw = 0;
   uint32_t now = millis();
   serialCmd();
+  wifiTick(now);
   if (now - lastDraw >= 20) {  // 50 кадров в секунду
     lastDraw = now;
+    if (stripType != cfg.strip_type) {
+      stripType = cfg.strip_type;
+      lenta.updateType(STRIP_TYPES[stripType] + NEO_KHZ800);
+      lenta.updateLength(cfg.num_leds);
+    }
     if (lenta.numPixels() != cfg.num_leds) lenta.updateLength(cfg.num_leds);
     updateMode(now);
     draw(now);
