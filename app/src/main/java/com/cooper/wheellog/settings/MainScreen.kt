@@ -28,6 +28,7 @@ enum class SettingsScreenEnum(@StringRes val title: Int) {
     Wheel(title = R.string.wheel_settings_title),
     Trip(title = R.string.trip_settings_title),
     Helmet(title = R.string.helmet_settings_title),
+    LightDevice(title = R.string.light_device_title),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -111,7 +112,10 @@ fun mainScreen(
                 tripScreen()
             }
             composable(route = SettingsScreenEnum.Helmet.name) {
-                helmetScreen()
+                lightingScreen(onOpen = { navController.navigate(SettingsScreenEnum.LightDevice.name) })
+            }
+            composable(route = SettingsScreenEnum.LightDevice.name) {
+                lightDeviceScreen()
             }
         }
     }

@@ -986,10 +986,10 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.miHelmet -> {
                 if (HelmetLink.address.isEmpty()) {
-                    showSnackBar("Шлем не выбран: Настройки, Шлем, «Найти шлем»")
+                    showSnackBar("Подсветка не настроена: Настройки, Подсветка")
                 } else {
                     HelmetLink.enabled = !HelmetLink.enabled
-                    showSnackBar(if (HelmetLink.enabled) "Шлем: передача включена" else "Шлем: передача выключена")
+                    showSnackBar(if (HelmetLink.enabled) "Подсветка включена" else "Подсветка выключена")
                 }
                 setMenuIconStates()
                 true
