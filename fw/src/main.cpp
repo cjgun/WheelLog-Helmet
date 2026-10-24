@@ -10,6 +10,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 #include <ArduinoOTA.h>
+#include <WiFiUdp.h>
 #include "protokol.h"
 #include "sekrety.h"  // WIFI_SSID, WIFI_PASS, OTA_PASS - создаётся на MiniGUN, в git нет
 
@@ -19,11 +20,13 @@
 #define PIN_PLATA   8      // синий светодиод на плате, горит по LOW
 #define PIN_RIM     7      // ключ обода: HIGH - обод погашен (BC547 закрывает MOSFET)
 #define HOST_NAME   "cj-wheel"
+#define PIN_WHEEL_RX 3     // провод RXD модуля Bluetooth колеса (только приём)
 #else
 #define PIN_LENTA   18     // nanoESP32-C6
 #define PIN_PLATA   8      // RGB-светодиод на плате
 #define PIN_RIM     -1
 #define HOST_NAME   "cj-helmet"
+#define PIN_WHEEL_RX 20    // провод RXD модуля Bluetooth колеса (только приём)
 #endif
 #define MAX_LEDS    300
 #define TIMEOUT_MS  1000   // нет пакетов дольше - режим «нет связи»
@@ -84,6 +87,7 @@ static volatile uint32_t turnUntil = 0, turnStart = 0;
 static volatile int16_t pitch = 0;
 static volatile float tiltAvg = 0;          // медленное среднее наклона, 0.01 градуса
 static volatile uint32_t lastRelay = 0;     // колесо: последний пакет от шлема
+static volatile uint32_t wLast = 0;         // последний пакет колеса по проводу
 static volatile uint8_t relayMode = M_NOSIGNAL;
 static volatile bool relayNow = false;      // шлем: переслать сейчас
 static int16_t prevSpeed = 0;
@@ -294,7 +298,9 @@ static void updateMode(uint32_t now) {
   portEXIT_CRITICAL(&mux);
 
   bool phone = connected && lp && now - lp <= TIMEOUT_MS;
-  bool relay = !phone && lr && now - lr <= TIMEOUT_MS;
+  bool relay = !phone && lr && now - lr <= TIMEOUT_MS && relayMode != 255;
+  bool wire = !phone && wLast && now - wLast <= TIMEOUT_MS;  // данные по проводу от колеса
+  if (wire) { phone = true; fl = 1; }
   Mode m;
   if (relay) {
     m = (Mode)relayMode;  // колесо показывает то же, что шлем
@@ -539,6 +545,75 @@ static void sendFrame(uint32_t now) {
   }
 }
 
+// ---------- колесо по проводу ----------
+// Плата слушает провод RXD Bluetooth-модуля колеса (колесо -> модуль): те же пакеты Veteran, что
+// получает телефон. Только приём, вывод TX не настроен - в колесо ничего не уходит.
+// Пакет: DC 5A 5C, длина, данные big-endian; скорость s16 @6 (0.1 км/ч), напряжение u16 @4 (0.01 В),
+// фазный ток s16 @16 (0.1 А), наклон s16 @32 (0.01 град). Длина > 38 - в конце CRC32.
+static const uint32_t BAUDS[] = {57600, 115200, 9600, 38400, 19200};
+static uint8_t baudIdx = 0;
+static uint32_t baudSince = 0, wFrames = 0, wBad = 0, wBytes = 0;
+static int16_t wSpeed = 0, wPitch = 0, wCur = 0; static uint16_t wVolt = 0;
+static uint8_t wbuf[256]; static int wlen = 0;
+static WiFiUDP udp;
+
+static uint32_t crc32(const uint8_t *d, int n) {
+  uint32_t c = 0xFFFFFFFF;
+  for (int i = 0; i < n; i++) { c ^= d[i]; for (int k = 0; k < 8; k++) c = (c >> 1) ^ (0xEDB88320 & -(c & 1)); }
+  return ~c;
+}
+static inline int16_t s16be(const uint8_t *p) { return (int16_t)((p[0] << 8) | p[1]); }
+
+static void wheelFrame(const uint8_t *f, int n) {
+  // n - всё с заголовка; данные после 4 байт заголовка+длины
+  if (n > 42) {  // длина > 38 - CRC32 в конце
+    uint32_t want = ((uint32_t)f[n - 4] << 24) | (f[n - 3] << 16) | (f[n - 2] << 8) | f[n - 1];
+    if (crc32(f, n - 4) != want) { wBad++; return; }
+  }
+  if (n < 36) { wBad++; return; }
+  wVolt = (f[4] << 8) | f[5]; wSpeed = s16be(f + 6); wCur = s16be(f + 16); wPitch = s16be(f + 32);
+  wFrames++; wLast = millis();
+  // если телефон сейчас не пишет - провод становится источником данных
+  if (!(lastPkt && millis() - lastPkt < TIMEOUT_MS && connected)) {
+    DataV2 p = {2, 1, wSpeed, wCur, wPitch, 0, 0, 0};
+    takeData(p, millis());
+    lastRelay = millis(); relayMode = 255;  // помечаем: данные есть, режим считаем сами
+  }
+}
+
+static void wheelTick(uint32_t now) {
+  if (baudSince == 0) { Serial1.begin(BAUDS[0], SERIAL_8N1, PIN_WHEEL_RX, -1); baudSince = now; }
+  while (Serial1.available()) {
+    uint8_t b = Serial1.read(); wBytes++;
+    if (wlen < 3) {  // ищем DC 5A 5C
+      static const uint8_t H[3] = {0xDC, 0x5A, 0x5C};
+      if (b == H[wlen]) wbuf[wlen++] = b; else wlen = (b == 0xDC) ? (wbuf[0] = b, 1) : 0;
+      continue;
+    }
+    wbuf[wlen++] = b;
+    if (wlen >= 4) {
+      int total = 4 + wbuf[3];
+      if (total > (int)sizeof wbuf) { wlen = 0; wBad++; continue; }
+      if (wlen >= total) { wheelFrame(wbuf, total); wlen = 0; }
+    }
+  }
+  // за 3 с ни одного пакета - следующая скорость
+  if (wFrames == 0 && now - baudSince > 3000) {
+    baudIdx = (baudIdx + 1) % (sizeof BAUDS / sizeof BAUDS[0]);
+    Serial1.updateBaudRate(BAUDS[baudIdx]); baudSince = now; wlen = 0;
+  }
+  static uint32_t lastRep = 0;
+  if (now - lastRep >= 1000) {
+    lastRep = now;
+    char m[200];
+    snprintf(m, sizeof m, "провод: %lu бод, байт %lu, пакетов %lu, битых %lu, v=%.1f км/ч U=%.2f В I=%.1f А наклон=%.2f, режим %d",
+             (unsigned long)BAUDS[baudIdx], (unsigned long)wBytes, (unsigned long)wFrames, (unsigned long)wBad,
+             wSpeed / 10.0, wVolt / 100.0, wCur / 10.0, wPitch / 100.0, mode);
+    Serial.println(m);
+    if (WiFi.isConnected()) { udp.beginPacket(IPAddress(255, 255, 255, 255), 47047); udp.write((const uint8_t *)m, strlen(m)); udp.endPacket(); }
+  }
+}
+
 // ---------- Wi-Fi и обновление по воздуху ----------
 // Дома (телефон не подключён дольше WIFI_AFTER_MS) плата подключается к домашней сети и ждёт
 // прошивку с MiniGUN (/opt/helmet/obnovit.sh). Подключился телефон - Wi-Fi отпускается,
@@ -673,6 +748,7 @@ void loop() {
   serialCmd();
   wifiTick(now);
   relayTick(now);
+  wheelTick(now);
   if (now - lastDraw >= 20) {  // 50 кадров в секунду
     lastDraw = now;
     if (stripType != cfg.strip_type) {
