@@ -222,11 +222,13 @@ fun applicationScreen(
             multiList(
                 name = stringResource(R.string.main_menu_buttons_title),
                 entries = mapOf(
+                    "helmet" to "Шлем: передача вкл/выкл",
                     "watch" to stringResource(R.string.start_pebble_service),
                     "miband" to stringResource(R.string.miband_desc),
                     "reset" to stringResource(R.string.reset_max_values_title),
                 ),
                 keyIcons = mapOf(
+                    "helmet" to R.drawable.ic_helmet_white_24,
                     "watch" to R.drawable.ic_action_watch_white,
                     "miband" to R.drawable.ajdm_ic_mi_med,
                     "reset" to R.drawable.ic_action_reset,

@@ -279,7 +279,7 @@ class AppConfig(var context: Context): KoinComponent {
 
     var mainMenuButtons: Array<String>
         get() = getValue<String?>("main_menu_buttons", null)?.split(separator)?.toTypedArray()
-            ?: arrayOf("watch")
+            ?: arrayOf("helmet")  // форк «Шлем»: вместо часов по умолчанию кнопка шлема
         set(value) = setValue("main_menu_buttons", value.joinToString(separator))
 
     var showClock: Boolean

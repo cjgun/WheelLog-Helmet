@@ -1,0 +1,7 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- шлем CJ-Helmet, вид сбоку -->
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M11.5,3C6.5,3 2.5,7 2.5,12V16C2.5,17.7 3.8,19 5.5,19H15C18.6,19 21.5,16.4 21.5,13V12C21.5,7 17,3 11.5,3ZM12.5,8.5H20.4C20.8,9.5 21,10.6 21,11.7V12.5H12.5C11.4,12.5 10.5,11.6 10.5,10.5C10.5,9.4 11.4,8.5 12.5,8.5ZM4,15.5H14V17H4.6C4.2,16.6 4,16.1 4,15.5Z"/>
+</vector>

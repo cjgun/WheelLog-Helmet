@@ -87,12 +87,7 @@ fun startScreen(
                 onSelect(SettingsScreenEnum.Alarm.name)
             }
         }
-        clickablePref(
-            name = stringResource(R.string.watch_settings_title),
-            themeIcon = ThemeIconEnum.SettingsWatch,
-        ) {
-            onSelect(SettingsScreenEnum.Watch.name)
-        }
+        // форк «Шлем»: пункт часов убран, его место занял «Шлем» выше
         if (isSpecificVisible) {
             clickablePref(
                 name = stringResource(R.string.wheel_settings_title),

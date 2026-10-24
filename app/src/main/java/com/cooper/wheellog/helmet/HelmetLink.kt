@@ -39,6 +39,16 @@ object HelmetLink {
     val config = mutableStateOf<ByteArray?>(null)
     val sent = mutableStateOf(0)
 
+    /** Вызывается на главном потоке при смене состояния связи (значок шлема в верхней строке). */
+    var onStatusChange: (() -> Unit)? = null
+    /** Шлем на связи: сервис найден, пакеты данных можно писать. */
+    val isLinked: Boolean get() = ready && gatt != null
+
+    private fun setStatus(s: String) {
+        status.value = s
+        onStatusChange?.invoke()
+    }
+
     private lateinit var ctx: Context
     private lateinit var prefs: SharedPreferences
     private val main = Handler(Looper.getMainLooper())
@@ -68,13 +78,13 @@ object HelmetLink {
     fun connect() {
         if (!::ctx.isInitialized || gatt != null || address.isEmpty()) return
         val dev = try { adapter()?.getRemoteDevice(address) } catch (e: Exception) { null } ?: return
-        status.value = "подключение"
+        setStatus("подключение")
         gatt = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
                 dev.connectGatt(ctx, false, callback, BluetoothDevice.TRANSPORT_LE)
             else dev.connectGatt(ctx, false, callback)
         } catch (e: SecurityException) {
-            status.value = "нет разрешения Bluetooth"
+            setStatus("нет разрешения Bluetooth")
             null
         }
     }
@@ -88,7 +98,7 @@ object HelmetLink {
         gatt?.let { try { it.disconnect(); it.close() } catch (_: Exception) {} }
         gatt = null
         mode.value = -1
-        status.value = if (enabled) "отключено" else "выключено"
+        setStatus(if (enabled) "отключено" else "выключено")
     }
 
     private fun retry() {
@@ -103,13 +113,13 @@ object HelmetLink {
         override fun onConnectionStateChange(g: BluetoothGatt, st: Int, newState: Int) {
             main.post {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    status.value = "подключено, ищу сервис"
+                    setStatus("подключено, ищу сервис")
                     g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
                     g.discoverServices()
                 } else {
-                    status.value = "нет связи со шлемом, повтор"
-                    mode.value = -1
                     retry()
+                    setStatus("нет связи со шлемом, повтор")
+                    mode.value = -1
                 }
             }
         }
@@ -117,12 +127,12 @@ object HelmetLink {
         override fun onServicesDiscovered(g: BluetoothGatt, st: Int) {
             main.post {
                 val s = g.getService(SERVICE)
-                if (s == null) { status.value = "это не шлем CJ-Helmet"; retry(); return@post }
+                if (s == null) { setStatus("это не шлем CJ-Helmet"); retry(); return@post }
                 chData = s.getCharacteristic(DATA)
                 chConfig = s.getCharacteristic(CONFIG)
                 val chState = s.getCharacteristic(STATE)
                 ready = chData != null
-                status.value = "на связи"
+                setStatus("на связи")
                 // подписка на state, затем чтение config - по одной операции за раз
                 busy = true
                 g.setCharacteristicNotification(chState, true)
@@ -148,7 +158,7 @@ object HelmetLink {
 
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, st: Int) {
             if (c.uuid == CONFIG) main.post {
-                status.value = if (st == BluetoothGatt.GATT_SUCCESS) "настройки записаны" else "шлем не принял настройки"
+                setStatus(if (st == BluetoothGatt.GATT_SUCCESS) "настройки записаны" else "шлем не принял настройки")
                 readConfig()  // прочитать назад, что действует на самом деле
             }
         }
@@ -187,7 +197,7 @@ object HelmetLink {
         busy = true
         if (!write(g, c, bytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)) {
             busy = false
-            status.value = "шлем занят, повторите"
+            setStatus("шлем занят, повторите")
         }
     }
 

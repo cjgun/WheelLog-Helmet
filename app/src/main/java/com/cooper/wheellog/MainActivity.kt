@@ -1,5 +1,6 @@
 package com.cooper.wheellog
 
+import com.cooper.wheellog.helmet.HelmetLink
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.app.ActivityManager
@@ -91,6 +92,7 @@ class MainActivity : AppCompatActivity() {
     private var miSearch: MenuItem? = null
     private var miWheel: MenuItem? = null
     private var miWatch: MenuItem? = null
+    private var miHelmet: MenuItem? = null
     private var miBand: MenuItem? = null
     private var miLogging: MenuItem? = null
     private var mBluetoothAdapter: BluetoothAdapter? = null
@@ -560,6 +562,12 @@ class MainActivity : AppCompatActivity() {
 
         miBand?.isVisible = appConfig.mainMenuButtons.contains("miband")
         miWatch?.isVisible = appConfig.mainMenuButtons.contains("watch")
+        miHelmet?.isVisible = appConfig.mainMenuButtons.contains("helmet")
+        // шлем: серый - передача выключена, белый - включена, но нет связи, зелёный - на связи
+        miHelmet?.icon?.mutate()?.let {
+            it.setTint(if (HelmetLink.enabled && HelmetLink.isLinked) 0xFF4CAF50.toInt() else 0xFFFFFFFF.toInt())
+            it.alpha = if (HelmetLink.enabled && HelmetLink.address.isNotEmpty()) 255 else 90
+        }
         mMenu?.findItem(R.id.miReset)?.isVisible = appConfig.mainMenuButtons.contains("reset")
 
         if (PebbleService.isInstanceCreated()) {
@@ -782,6 +790,7 @@ class MainActivity : AppCompatActivity() {
 
         // Checking GPS is enabled
         DialogHelper.checkAndShowLocationDialog(this)
+        HelmetLink.onStatusChange = { setMenuIconStates() }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -792,6 +801,7 @@ class MainActivity : AppCompatActivity() {
     public override fun onPause() {
         super.onPause()
         isPaused = true
+        HelmetLink.onStatusChange = null
         try {
             unregisterReceiver(mMainViewBroadcastReceiver)
         } catch (e: Exception) {
@@ -901,6 +911,7 @@ class MainActivity : AppCompatActivity() {
             miSearch = findItem(R.id.miSearch)
             miWheel = findItem(R.id.miWheel)
             miWatch = findItem(R.id.miWatch)
+            miHelmet = findItem(R.id.miHelmet)
             miBand = findItem(R.id.miBand)
             miLogging = findItem(R.id.miLogging)
         }
@@ -971,6 +982,16 @@ class MainActivity : AppCompatActivity() {
             }
             R.id.miWatch -> {
                 toggleWatch()
+                true
+            }
+            R.id.miHelmet -> {
+                if (HelmetLink.address.isEmpty()) {
+                    showSnackBar("Шлем не выбран: Настройки, Шлем, «Найти шлем»")
+                } else {
+                    HelmetLink.enabled = !HelmetLink.enabled
+                    showSnackBar(if (HelmetLink.enabled) "Шлем: передача включена" else "Шлем: передача выключена")
+                }
+                setMenuIconStates()
                 true
             }
             R.id.miBand -> {
