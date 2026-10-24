@@ -553,7 +553,7 @@ static void sendFrame(uint32_t now) {
 static const uint32_t BAUDS[] = {57600, 115200, 9600, 38400, 19200};
 static uint8_t baudIdx = 0;
 static uint32_t baudSince = 0, wFrames = 0, wBad = 0, wBytes = 0;
-static int16_t wSpeed = 0, wPitch = 0, wCur = 0; static uint16_t wVolt = 0;
+static int16_t wSpeed = 0, wPitch = 0, wCur = 0; static uint16_t wVolt = 0; static uint8_t wPwm = 0, wBat = 0;
 static uint8_t wbuf[256]; static int wlen = 0;
 static WiFiUDP udp;
 
@@ -572,10 +572,14 @@ static void wheelFrame(const uint8_t *f, int n) {
   }
   if (n < 36) { wBad++; return; }
   wVolt = (f[4] << 8) | f[5]; wSpeed = s16be(f + 6); wCur = s16be(f + 16); wPitch = s16be(f + 32);
+  // PWM колеса @34: 0.01 %, как hwPwm в WheelLog (10000 = 100 %)
+  wPwm = min(100, ((f[34] << 8) | f[35]) / 100);
+  // заряд по напряжению, как у WheelLog для Sherman L (0.01 В): 119.02 В = 0 %, 148.05 В = 100 %
+  wBat = wVolt <= 11902 ? 0 : wVolt >= 14805 ? 100 : (wVolt - 11902) * 100 / 2903;
   wFrames++; wLast = millis();
   // если телефон сейчас не пишет - провод становится источником данных
   if (!(lastPkt && millis() - lastPkt < TIMEOUT_MS && connected)) {
-    DataV2 p = {2, 1, wSpeed, wCur, wPitch, 0, 0, 0};
+    DataV2 p = {2, 1, wSpeed, wCur, wPitch, wPwm, wBat, 0};
     takeData(p, millis());
     lastRelay = millis(); relayMode = 255;  // помечаем: данные есть, режим считаем сами
   }
@@ -606,9 +610,9 @@ static void wheelTick(uint32_t now) {
   if (now - lastRep >= 1000) {
     lastRep = now;
     char m[200];
-    snprintf(m, sizeof m, "провод: %lu бод, байт %lu, пакетов %lu, битых %lu, v=%.1f км/ч U=%.2f В I=%.1f А наклон=%.2f, режим %d",
+    snprintf(m, sizeof m, "провод: %lu бод, байт %lu, пакетов %lu, битых %lu, v=%.1f км/ч U=%.2f В I=%.1f А наклон=%.2f PWM=%u%% заряд=%u%%, режим %d",
              (unsigned long)BAUDS[baudIdx], (unsigned long)wBytes, (unsigned long)wFrames, (unsigned long)wBad,
-             wSpeed / 10.0, wVolt / 100.0, wCur / 10.0, wPitch / 100.0, mode);
+             wSpeed / 10.0, wVolt / 100.0, wCur / 10.0, wPitch / 100.0, wPwm, wBat, mode);
     Serial.println(m);
     if (WiFi.isConnected()) { udp.beginPacket(IPAddress(255, 255, 255, 255), 47047); udp.write((const uint8_t *)m, strlen(m)); udp.endPacket(); }
   }
