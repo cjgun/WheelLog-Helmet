@@ -185,7 +185,13 @@ private fun devicePart(id: String, wide: Boolean) {
         if (d.isHelmet) checkRow("Контроллер ZENGGE", "вся лента целиком: свой эффект, вспышка стопа, повороты", d.zgOn) { on ->
             Lighting.update(id) { it.copy(zgOn = on) }
         }
-        TextButton(onClick = { Lighting.remove(id); Lighting.selected.value = "" }) { Text("Удалить устройство", color = MaterialTheme.colorScheme.error) }
+        var ask by remember(id) { mutableStateOf(false) }
+        TextButton(onClick = { ask = true }) { Text("Удалить устройство", color = MaterialTheme.colorScheme.error) }
+        if (ask) AlertDialog(onDismissRequest = { ask = false },
+            title = { Text("Удалить «${d.name}»?") },
+            text = { Text("Устройство пропадёт из списка вместе с его настройками в приложении. Настройки на самой плате останутся.") },
+            confirmButton = { TextButton(onClick = { ask = false; Lighting.remove(id); Lighting.selected.value = "" }) { Text("Удалить") } },
+            dismissButton = { TextButton(onClick = { ask = false }) { Text("Отмена") } })
     }
     if (d.espOn) {
         boardCard(d, link)
@@ -403,7 +409,7 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
                 val col: Color = when {
                     frame != null && frame.size >= total * 3 && d.espOn ->
                         Color((frame[idx * 3].toInt() and 0xff), (frame[idx * 3 + 1].toInt() and 0xff), (frame[idx * 3 + 2].toInt() and 0xff))
-                    s.role == -1 -> zgColor(zl, idx, t)
+                    s.role == -1 -> if (d.zgOn) zgColor(zl, idx, t) else Color.Black
                     else -> simColor(s.role, j, s.count, mode, turn, t)
                 }
                 if (p != null) led(p, col, if (si == sel) 1.5f else 1f)
