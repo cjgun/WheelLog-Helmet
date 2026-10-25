@@ -1,3 +1,27 @@
+# WheelLog Шлем (CJ-Helmet)
+
+Форк [WheelLog](https://github.com/Wheellog/Wheellog.Android): приложение подключается к моноколесу
+Sherman L, по скорости, току и наклону понимает разгон, торможение и поворот и управляет светом
+на шлемах и на самом колесе. В этом же репозитории - прошивка плат ESP32 (папка `cj-helmet/`).
+
+Fork of WheelLog: helmet and wheel lighting for Sherman L - brake, acceleration and turn signals
+on ESP32 boards in helmets and on the wheel, plus ZENGGE (LEDnetWF) Bluetooth LED controllers.
+
+**Шаги проекта** (метки `cj-*`, подробно - [cj-helmet/STEPS.md](cj-helmet/STEPS.md)):
+
+1. `cj-1-shlem` - шлем со стоп-сигналом: плата в шлеме, модуль «Шлем» в приложении.
+2. `cj-2-svet-koleso` - свет колеса: роли плат «шлем» и «колесо», связь ESP-NOW, раздел «Подсветка».
+3. `cj-3-zengge` - дополнительный контроллер ZENGGE на втором шлеме.
+4. `cj-4-provod` - провод: плата читает Bluetooth-модуль колеса напрямую.
+
+**Скачать APK:** вкладка [Actions](https://github.com/cjgun/WheelLog-Helmet/actions) - последняя
+сборка `CJ Helmet APK`, файл в разделе Artifacts; версии с метками `cj-*` - в Releases.
+Приложение ставится рядом с WheelLog из Play (свой applicationId `com.cooper.wheellog.helmet`).
+
+Ниже - исходный README WheelLog.
+
+---
+
 # WheelLog.Android
 
 [![Latest release](https://img.shields.io/github/release/wheellog/wheellog.android.svg)](https://github.com/wheellog/wheellog.android/releases/latest)
