@@ -1,0 +1,67 @@
+# Сборка «WheelLog Шлем» (форк с подсветкой шлемов и колеса).
+# Родной gradle.yml WheelLog не трогаем - так проще подтягивать обновления апстрима.
+#
+# Подпись: если в Settings -> Secrets -> Actions лежат HELMET_KS_B64 (helmet.jks в base64)
+# и HELMET_KS_PASS, собирается release с той же подписью, что APK с MiniGUN, - ставится
+# поверх. Без секретов собирается debug (ставится рядом, как отдельное приложение .debug).
+# Метка cj-* дополнительно выкладывает APK в Releases.
+
+name: CJ Helmet APK
+
+on:
+  push:
+    branches: [shlem]
+    tags: ['cj-*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Ключ подписи из секретов
+        id: ks
+        env:
+          KS_B64: ${{ secrets.HELMET_KS_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/helmet.jks"
+            echo "path=$RUNNER_TEMP/helmet.jks" >> "$GITHUB_OUTPUT"
+            echo "task=:app:assembleRelease" >> "$GITHUB_OUTPUT"
+            echo "dir=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "Секретов подписи нет - собираю debug"
+            echo "task=:app:assembleDebug" >> "$GITHUB_OUTPUT"
+            echo "dir=debug" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Сборка
+        env:
+          HELMET_KS: ${{ steps.ks.outputs.path }}
+          HELMET_KS_PASS: ${{ secrets.HELMET_KS_PASS }}
+        run: |
+          [ -n "$HELMET_KS" ] || unset HELMET_KS
+          chmod +x gradlew
+          ./gradlew --no-daemon ${{ steps.ks.outputs.task }}
+
+      - name: APK в артефакт
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheellog-shlem-${{ steps.ks.outputs.dir }}
+          path: app/build/outputs/apk/${{ steps.ks.outputs.dir }}/*.apk
+
+      - name: APK в Releases (только метки cj-*)
+        if: startsWith(github.ref, 'refs/tags/cj-')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/${{ steps.ks.outputs.dir }}/*.apk
