@@ -19,8 +19,9 @@ if os.path.exists(p):
     for line in open(p):
         if line.startswith('ota='):
             ota = line[4:].strip()
-ota = ota or secrets.token_hex(12)
-open(p, 'w').write('ota=' + ota + '\n')
+if not ota:  # создаём пароль один раз, остальные строки (apk= и др.) не трогаем
+    ota = secrets.token_hex(12)
+    open(p, 'a').write('ota=' + ota + '\n')
 c = lambda s: s.replace('\\', '\\\\').replace('"', '\\"')
 open('/opt/helmet/fw/src/sekrety.h', 'w').write(
     '// Создаётся на MiniGUN из /opt/esphome/config/secrets.yaml и /opt/helmet/sekrety.txt, в git не кладётся\n'
