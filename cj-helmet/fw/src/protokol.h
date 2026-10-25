@@ -11,6 +11,17 @@
 #define UUID_STATE         "ca1c4800-cea8-44c2-8e14-3be95eb3af36"  // notify/read
 #define UUID_CMD           "4f1d2a6e-8c3b-4e57-9a10-6b2d7c9e0f31"  // write: проверка, подсветка сегмента
 #define UUID_FRAME         "9b7e3c21-5d4a-4f68-b2e1-0c8a6f4d2e95"  // notify: кадр ленты кусками
+#define UUID_NET           "6d3e1f40-2b7a-4c55-9e10-3a8f5c2d7b61"  // read/write: имя, Wi-Fi, обновление (текст)
+
+// Сеть и обновление (characteristic net), текст UTF-8.
+// Запись, одна команда за раз:
+//   name=<имя>            имя в Bluetooth, до 20 байт; пусто - CJ-Helmet-XXXX / CJ-Wheel-XXXX по MAC; после перезапуска
+//   wifi=<сеть>\t<пароль>  запомнить сеть (пароль не читается обратно)
+//   wifi on | wifi off    включить или выключить Wi-Fi (после перезапуска выключен)
+//   upd                   включить Wi-Fi, скачать прошивку с cjgun.ru, проверить MD5, перезапуститься
+//   reboot                перезапуск
+// Чтение - строки key=value: name, ssid, wifi (off / подключение / адрес), upd (состояние), ver, board.
+#define NAME_MAX 20
 
 // Пакет данных v1 от телефона, 8 байт
 struct __attribute__((packed)) DataV1 {

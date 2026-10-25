@@ -97,8 +97,8 @@ class Cfg(src: ByteArray = DEFAULT) {
         val STRIPS = listOf("WS2812 / WS2815 (GRB)", "RGB", "BRG", "SK6812 RGBW (GRBW)", "RGBW")
 
         val TEMPLATE_FF = listOf(Seg(15, Role.FRONT_R), Seg(40, Role.SIDE_R), Seg(25, Role.BACK), Seg(40, Role.SIDE_L, true), Seg(15, Role.FRONT_L, true))
-        // мотокросс: плата на затылке, стоп-полоса, правый бок к подбородку, козырёк, левый бок назад
-        val TEMPLATE_MX = listOf(Seg(15, Role.STOP), Seg(40, Role.SIDE_R, true), Seg(2, Role.PEAK_R), Seg(2, Role.PEAK_L), Seg(40, Role.SIDE_L))
+        // мотокросс: лента, как у интеграла, по нижнему краю кольцом, на козырьке точек нет
+        val TEMPLATE_MX = TEMPLATE_FF
         val TEMPLATE_WHEEL = listOf(Seg(8, Role.DRL_R), Seg(8, Role.DRL_L), Seg(6, Role.PEDAL_L), Seg(8, Role.TAIL_L), Seg(8, Role.TAIL_R), Seg(6, Role.PEDAL_R))
 
         /** Значения по умолчанию, как CFG_DEFAULT в прошивке. */

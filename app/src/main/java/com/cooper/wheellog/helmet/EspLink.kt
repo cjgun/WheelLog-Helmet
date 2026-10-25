@@ -22,6 +22,9 @@ class EspLink(private val ctx: Context, val address: String, val devId: String) 
     val config = mutableStateOf<ByteArray?>(null)
     val sent = mutableIntStateOf(0)
     val ma = mutableIntStateOf(0)
+    /** Сеть и обновление (characteristic net): name, ssid, wifi, upd, ver, board. Пусто - старая прошивка. */
+    val net = mutableStateOf<Map<String, String>>(emptyMap())
+    val hasNet get() = chNet != null
     /** Последний кадр ленты, RGB по 3 байта на точку. */
     @Volatile var frame: ByteArray = ByteArray(0)
     val linked get() = ready && gatt != null
@@ -31,6 +34,7 @@ class EspLink(private val ctx: Context, val address: String, val devId: String) 
     private var chConfig: BluetoothGattCharacteristic? = null
     private var chCmd: BluetoothGattCharacteristic? = null
     private var chFrame: BluetoothGattCharacteristic? = null
+    private var chNet: BluetoothGattCharacteristic? = null
     private var ready = false
     private var closed = false
     private var frameWanted = false
@@ -114,11 +118,13 @@ class EspLink(private val ctx: Context, val address: String, val devId: String) 
                 chConfig = s.getCharacteristic(UUID_CONFIG)
                 chCmd = s.getCharacteristic(UUID_CMD)
                 chFrame = s.getCharacteristic(UUID_FRAME)
+                chNet = s.getCharacteristic(UUID_NET)
                 val chState = s.getCharacteristic(UUID_STATE)
                 ready = chData != null
                 setStatus(if (chCmd == null) "на связи, старая прошивка" else "на связи")
                 if (chState != null) subscribe(g, chState, true)
                 readConfig()
+                readNet()
                 if (frameWanted) setFrame(true)
             }
         }
@@ -139,6 +145,7 @@ class EspLink(private val ctx: Context, val address: String, val devId: String) 
                 setStatus(if (st == BluetoothGatt.GATT_SUCCESS) "настройки записаны" else "плата не приняла настройки")
                 readConfig()  // прочитать назад, что действует на самом деле
             }
+            if (c.uuid == UUID_NET) main.post { readNet() }
             done()
         }
 
@@ -154,6 +161,11 @@ class EspLink(private val ctx: Context, val address: String, val devId: String) 
         if (c.uuid == UUID_CONFIG && st == BluetoothGatt.GATT_SUCCESS && v != null) {
             config.value = v
             if (v.size == Cfg.SIZE && v[0].toInt() == Cfg.VER) Lighting.onBoardConfig(devId, v)
+        }
+        if (c.uuid == UUID_NET && st == BluetoothGatt.GATT_SUCCESS && v != null) {
+            net.value = String(v, Charsets.UTF_8).lines().mapNotNull { l ->
+                val i = l.indexOf('='); if (i > 0) l.substring(0, i) to l.substring(i + 1) else null
+            }.toMap()
         }
         done()
     }
@@ -190,6 +202,19 @@ class EspLink(private val ctx: Context, val address: String, val devId: String) 
         val g = gatt ?: return@enqueue false
         val c = chConfig ?: return@enqueue false
         g.readCharacteristic(c)
+    }
+
+    fun readNet() = enqueue {
+        val g = gatt ?: return@enqueue false
+        val c = chNet ?: return@enqueue false
+        g.readCharacteristic(c)
+    }
+
+    /** Команда сети: name=, wifi=<сеть>\t<пароль>, wifi on, wifi off, upd, reboot (fw/src/protokol.h). */
+    fun netCmd(cmd: String) = enqueue {
+        val g = gatt ?: return@enqueue false
+        val c = chNet ?: return@enqueue false
+        write(g, c, cmd.toByteArray(Charsets.UTF_8), BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
     }
 
     /** Записать config целиком; после записи плата перечитывается. */
@@ -244,6 +269,7 @@ class EspLink(private val ctx: Context, val address: String, val devId: String) 
         val UUID_STATE: UUID = UUID.fromString("ca1c4800-cea8-44c2-8e14-3be95eb3af36")
         val UUID_CMD: UUID = UUID.fromString("4f1d2a6e-8c3b-4e57-9a10-6b2d7c9e0f31")
         val UUID_FRAME: UUID = UUID.fromString("9b7e3c21-5d4a-4f68-b2e1-0c8a6f4d2e95")
+        val UUID_NET: UUID = UUID.fromString("6d3e1f40-2b7a-4c55-9e10-3a8f5c2d7b61")
         val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 }

@@ -1,6 +1,7 @@
 package com.cooper.wheellog.settings
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,14 +19,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cooper.wheellog.helmet.*
 import kotlinx.coroutines.delay
-import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 // Правки держатся вне экрана: сложили или разложили Fold - активность пересоздаётся, правка остаётся
 private val edits = mutableStateMapOf<String, ByteArray>()
@@ -106,7 +112,9 @@ private fun deviceRow(d: LightDevice, open: (String) -> Unit) {
         color = if (Lighting.selected.value == d.id) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { open(d.id) }) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Canvas(Modifier.size(64.dp, 52.dp)) { silhouette(d.kind, MaterialTheme_onSurface) }
+            if (d.isHelmet) Image(painterResource(HelmetViews.forHelmet(d.kind == DevKind.HELMET_MX)[0].res), null,
+                Modifier.size(64.dp, 52.dp).background(Color.Black, RoundedCornerShape(8.dp)), contentScale = ContentScale.Fit)
+            else Canvas(Modifier.size(64.dp, 52.dp)) { silhouette(d.kind, MaterialTheme_onSurface) }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(d.name, fontWeight = FontWeight.Bold)
@@ -225,6 +233,58 @@ private fun boardCard(d: LightDevice, link: EspLink?) {
                 Lighting.update(d.id) { it.copy(espAddr = a, espOn = true) }
             }.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.primary)
         }
+    }
+    if (link != null && link.linked) netCard(link)
+}
+
+/** Имя платы в Bluetooth, Wi-Fi и обновление прошивки с cjgun.ru (characteristic net). */
+@Composable
+private fun netCard(link: EspLink) {
+    val net = link.net.value
+    card("Имя, Wi-Fi и обновление") {
+        if (!link.hasNet) {
+            Text("На плате старая прошивка: имя и обновление по воздуху появятся после одной прошивки по кабелю.",
+                style = MaterialTheme.typography.bodySmall)
+            return@card
+        }
+        val upd = net["upd"] ?: ""
+        val wifi = net["wifi"] ?: "off"
+        val busy = upd.startsWith("подключаюсь") || upd.startsWith("проверяю") || upd.startsWith("загрузка") || wifi == "подключение"
+        // пока идёт обновление или подключение - читать ход раз в секунду, иначе раз в 10 с
+        LaunchedEffect(link, busy) { while (true) { delay(if (busy) 1000 else 10000); link.readNet() } }
+
+        Text("Имя в Bluetooth: ${net["name"] ?: "?"}", fontWeight = FontWeight.Bold)
+        var name by remember(link) { mutableStateOf("") }
+        OutlinedTextField(name, { v -> var r = v; while (r.toByteArray().size > 20) r = r.dropLast(1); name = r },
+            label = { Text("Своё имя (до 20 байт)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            OutlinedButton(onClick = { link.netCmd("name=" + name.trim()) }) { Text(if (name.isBlank()) "Имя по умолчанию" else "Сохранить имя") }
+            OutlinedButton(onClick = { link.netCmd("reboot") }) { Text("Перезапустить") }
+        }
+        Text("Новое имя появится после перезапуска платы. Пустое - имя по умолчанию с концом MAC.",
+            style = MaterialTheme.typography.bodySmall)
+
+        Text("Wi-Fi: " + when (wifi) { "off" -> "выключен"; "подключение" -> "подключается"; else -> "подключён, $wifi" } +
+            (net["ssid"]?.takeIf { it.isNotEmpty() }?.let { ", сеть $it" } ?: ", сеть не задана"),
+            fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
+        var ssid by remember(link) { mutableStateOf(net["ssid"] ?: "") }
+        var pass by remember(link) { mutableStateOf("") }
+        OutlinedTextField(ssid, { ssid = it }, label = { Text("Сеть Wi-Fi") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(pass, { pass = it }, label = { Text("Пароль") }, singleLine = true,
+            visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            OutlinedButton(onClick = { link.netCmd("wifi=" + ssid.trim() + "\t" + pass); pass = "" }, enabled = ssid.isNotBlank()) { Text("Сохранить сеть") }
+            OutlinedButton(onClick = { link.netCmd(if (wifi == "off") "wifi on" else "wifi off") }) { Text(if (wifi == "off") "Включить Wi-Fi" else "Выключить Wi-Fi") }
+        }
+        Text("Пароль хранится только в плате и обратно не читается. Пока Wi-Fi включён, связь шлема с колесом не работает.",
+            style = MaterialTheme.typography.bodySmall)
+
+        Text("Прошивка: ${net["ver"] ?: "?"} · ${net["board"] ?: "?"}", modifier = Modifier.padding(top = 10.dp))
+        Button(onClick = { link.netCmd("upd") }, enabled = !busy, modifier = Modifier.padding(top = 4.dp)) { Text("Обновить прошивку") }
+        if (upd.isNotEmpty() && upd != "нет") Text("Обновление: $upd",
+            color = if (upd.startsWith("ошибка")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Плата сама скачает прошивку с cjgun.ru по сохранённой сети и проверит её. Около полутора минут, потом перезапуск.",
+            style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -390,7 +450,7 @@ private fun zenggeCard(d: LightDevice, zl: ZenggeLink?) {
 
 // ======================= картинка =======================
 
-/** Шлем сверху (перед вверху) или колесо сверху, точки по сегментам; цвета - кадр с платы или расчёт. */
+/** Шлем на картинках (четыре вида) или колесо сверху, точки по сегментам; цвета - кадр с платы или расчёт. */
 @Composable
 private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
     Lighting.frameTick.intValue
@@ -403,21 +463,45 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
     val mode = link?.mode?.intValue ?: Lighting.mode.intValue
     val turn = link?.turn?.intValue ?: Lighting.turn.intValue
     val sel = selSeg.intValue
-    Canvas(Modifier.fillMaxWidth().aspectRatio(if (d.kind == DevKind.WHEEL) 1.25f else 0.95f).padding(vertical = 4.dp)) {
-        val pts = if (d.kind == DevKind.WHEEL) wheelLayout(segs, size) else helmetLayout(segs, d.kind == DevKind.HELMET_MX, size)
-        if (d.kind == DevKind.WHEEL) drawWheelBody(size) else drawHelmetBody(d.kind == DevKind.HELMET_MX, size)
-        var idx = 0
-        segs.forEachIndexed { si, s ->
-            for (j in 0 until s.count) {
-                val p = pts.getOrNull(idx)
-                val col: Color = when {
-                    frame != null && frame.size >= total * 3 && d.espOn ->
-                        Color((frame[idx * 3].toInt() and 0xff), (frame[idx * 3 + 1].toInt() and 0xff), (frame[idx * 3 + 2].toInt() and 0xff))
-                    s.role == -1 -> if (d.zgOn) zgColor(zl, idx, t) else Color.Black
-                    else -> simColor(s.role, j, s.count, mode, turn, t)
+    val segOf = IntArray(total); val jOf = IntArray(total)
+    run { var i = 0; segs.forEachIndexed { si, s -> for (j in 0 until s.count) { segOf[i] = si; jOf[i] = j; i++ } } }
+    fun colorAt(idx: Int): Color {
+        val s = segs[segOf[idx]]
+        return when {
+            frame != null && frame.size >= total * 3 && d.espOn ->
+                Color((frame[idx * 3].toInt() and 0xff), (frame[idx * 3 + 1].toInt() and 0xff), (frame[idx * 3 + 2].toInt() and 0xff))
+            s.role == -1 -> if (d.zgOn) zgColor(zl, idx, t) else Color.Black
+            else -> simColor(s.role, jOf[idx], s.count, mode, turn, t)
+        }
+    }
+    if (d.kind == DevKind.WHEEL) {
+        Canvas(Modifier.fillMaxWidth().aspectRatio(1.25f).padding(vertical = 4.dp)) {
+            val pts = wheelLayout(segs, size)
+            drawWheelBody(size)
+            for (idx in 0 until total) pts.getOrNull(idx)?.let { led(it, colorAt(idx), if (segOf[idx] == sel) 1.5f else 1f) }
+        }
+        return
+    }
+    val us = helmetU(segs)
+    val views = HelmetViews.forHelmet(d.kind == DevKind.HELMET_MX)
+    Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (row in 0..1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (c in 0..1) {
+                val v = views[row * 2 + c]
+                val img = ImageBitmap.imageResource(v.res)
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Canvas(Modifier.fillMaxWidth().aspectRatio(v.w.toFloat() / v.h).background(Color.Black, RoundedCornerShape(8.dp))) {
+                        val k = size.width / v.w
+                        drawImage(img, IntOffset.Zero, IntSize(img.width, img.height), IntOffset.Zero, IntSize(size.width.toInt(), size.height.toInt()))
+                        drawRect(Color.Black.copy(alpha = 0.35f))  // картинка темнее - точки ленты виднее
+                        for (idx in 0 until total) {
+                            val u = us[idx]
+                            if (u < 0f) continue
+                            for (ln in v.lines) ln.at(u)?.let { (x, y) -> led(Offset(x * k, y * k), colorAt(idx), if (segOf[idx] == sel) 1.6f else 1f) }
+                        }
+                    }
+                    Text(HelmetViews.titles[row * 2 + c], style = MaterialTheme.typography.labelSmall)
                 }
-                if (p != null) led(p, col, if (si == sel) 1.5f else 1f)
-                idx++
             }
         }
     }
@@ -435,38 +519,14 @@ private fun DrawScope.led(p: Offset, c: Color, k: Float) {
 
 private val RING = listOf(Role.FRONT_R, Role.SIDE_R, Role.BACK, Role.SIDE_L, Role.FRONT_L)
 
-/** Точки шлема: кольцо по ролям пропорционально числу точек, стоп-полоса внутри сзади, козырёк впереди. */
 /**
- * Шлем сверху, перед вверху. Форма по фото владельца: голова овальная, длина больше ширины примерно на треть,
- * спереди шире, к затылку уже (яйцо). Мотокросс длиннее и с козырьком впереди.
+ * Место каждой точки на кольце ленты шлема, u: 0 перед по центру, 0.25 правый бок, 0.5 затылок, 0.75 левый бок
+ * (как HelmetViews). Кольцо - роли по кругу пропорционально числу точек, у подбородка небольшой зазор.
+ * Стоп-полоса - на затылке, козырёк и выключенные точки не рисуются (-1).
  */
-private class Shell(mx: Boolean, sz: Size) {
-    val cx = sz.width / 2
-    val cy = sz.height * (if (mx) 0.56f else 0.52f)
-    val rx = sz.width * (if (mx) 0.30f else 0.33f)
-    val ry = sz.height * (if (mx) 0.37f else 0.38f)
-    private val egg = if (mx) -0.06f else 0.10f   // мотокросс к подбородку уже
-    /** Точка на контуре: угол от оси X (−90° - перед), k - масштаб от контура. */
-    fun at(deg: Float, k: Float = 1f): Offset {
-        val a = Math.toRadians(deg.toDouble())
-        val s = sin(a).toFloat(); val c = cos(a).toFloat()
-        return Offset(cx + rx * k * c * (1f - egg * s), cy + ry * k * s)
-    }
-    fun path(k: Float, d: Float = 0f): Path = Path().apply {
-        for (i in 0..72) {
-            val p = at(i * 5f, k)
-            val q = Offset(p.x + (p.x - cx) / maxOf(1f, kotlin.math.abs(p.x - cx) + kotlin.math.abs(p.y - cy)) * d, p.y)
-            if (i == 0) moveTo(q.x, q.y) else lineTo(q.x, q.y)
-        }
-        close()
-    }
-}
-
-/** Точки шлема: кольцо по ролям пропорционально числу точек, стоп-полоса внутри сзади, козырёк впереди. */
-private fun helmetLayout(segs: List<Seg>, mx: Boolean, sz: Size): List<Offset> {
-    val sh = Shell(mx, sz)
-    val out = Array(segs.sumOf { it.count }) { Offset.Zero }
-    val gap = if (mx) 56f else 14f; val span = 360f - gap
+private fun helmetU(segs: List<Seg>): FloatArray {
+    val out = FloatArray(segs.sumOf { it.count }) { -1f }
+    val gap = 14f; val span = 360f - gap
     val ringRoles = RING + -1
     val tot = segs.filter { it.role in ringRoles }.sumOf { it.count }.coerceAtLeast(1)
     val starts = segs.runningFold(0) { a, s -> a + s.count }
@@ -475,22 +535,14 @@ private fun helmetLayout(segs: List<Seg>, mx: Boolean, sz: Size): List<Offset> {
         if (s.role != role) return@forEachIndexed
         for (i in 0 until s.count) {
             val q = if (s.rev) s.count - 1 - i else i
-            out[starts[si] + i] = sh.at(gap / 2 + span * (k + q + 0.5f) / tot - 90f)
+            out[starts[si] + i] = (gap / 2 + span * (k + q + 0.5f) / tot) / 360f
         }
         k += s.count
     }
     segs.forEachIndexed { si, s ->
-        for (i in 0 until s.count) {
-            val f = if (s.count == 1) 0.5f else i / (s.count - 1f)
-            when (s.role) {
-                Role.STOP -> out[starts[si] + i] = Offset(sh.cx - sh.rx * 0.38f + sh.rx * 0.76f * f, sh.cy + sh.ry * 0.78f)
-                Role.PEAK_R -> out[starts[si] + i] = Offset(sh.cx + sh.rx * 0.45f + i * sz.width * 0.03f, sh.cy - sh.ry - sz.height * 0.07f - i * 6f)
-                Role.PEAK_L -> out[starts[si] + i] = Offset(sh.cx - sh.rx * 0.45f - i * sz.width * 0.03f, sh.cy - sh.ry - sz.height * 0.07f - i * 6f)
-                Role.OFF -> out[starts[si] + i] = Offset(-100f, -100f)
-            }
-        }
+        if (s.role == Role.STOP) for (i in 0 until s.count) out[starts[si] + i] = 0.45f + 0.1f * (if (s.count == 1) 0.5f else i / (s.count - 1f))
     }
-    return out.toList()
+    return out
 }
 
 /** Колесо сверху: перед вверху; ходовые по углам спереди, габариты сзади, педали по бокам. */
@@ -516,30 +568,6 @@ private fun wheelLayout(segs: List<Seg>, sz: Size): List<Offset> {
     return out.toList()
 }
 
-private fun DrawScope.drawHelmetBody(mx: Boolean, sz: Size) {
-    val sh = Shell(mx, sz)
-    drawPath(sh.path(1.10f), Color(0xFF2A3446))   // оболочка
-    drawPath(sh.path(0.90f), Color(0xFF141A24))   // внутри - голова
-    if (mx) {
-        // козырёк: узкий и длинный, впереди выступает за оболочку
-        val l = sh.at(-128f, 1.04f); val r = sh.at(-52f, 1.04f)
-        val p = Path().apply {
-            moveTo(l.x, l.y); lineTo(sh.cx - sh.rx * 0.20f, sh.cy - sh.ry * 1.50f)
-            quadraticBezierTo(sh.cx, sh.cy - sh.ry * 1.58f, sh.cx + sh.rx * 0.20f, sh.cy - sh.ry * 1.50f)
-            lineTo(r.x, r.y); close()
-        }
-        drawPath(p, Color(0xFF3A4862))
-    } else {
-        // визор спереди: полоса по контуру
-        val p = Path().apply {
-            for (i in 0..24) { val q = sh.at(-150f + i * 5f, 1.02f); if (i == 0) moveTo(q.x, q.y) else lineTo(q.x, q.y) }
-            for (i in 24 downTo 0) { val q = sh.at(-150f + i * 5f, 0.93f); lineTo(q.x, q.y) }
-            close()
-        }
-        drawPath(p, Color(0xFF3B4C6B))
-    }
-}
-
 private fun DrawScope.drawWheelBody(sz: Size) {
     val w = sz.width; val h = sz.height
     drawRoundRect(Color(0xFF2A3446), Offset(w * 0.3f, h * 0.1f), Size(w * 0.4f, h * 0.8f), androidx.compose.ui.geometry.CornerRadius(24f))
@@ -548,35 +576,14 @@ private fun DrawScope.drawWheelBody(sz: Size) {
     drawRect(Color(0xFF3A4862), Offset(w * 0.7f, h * 0.48f), Size(w * 0.1f, h * 0.04f))
 }
 
-/** Силуэт сбоку для списка: интеграл, мотокросс, колесо. */
+/** Колесо для списка (шлемы в списке - картинкой). */
 private fun DrawScope.silhouette(kind: DevKind, c: Color) {
     val sx = size.width / 120f; val sy = size.height / 100f
     fun P(x: Float, y: Float) = Offset(x * sx, y * sy)
-    when (kind) {
-        DevKind.HELMET_MX -> {
-            drawPath(Path().apply {
-                moveTo(14 * sx, 70 * sy); cubicTo(8 * sx, 35 * sy, 30 * sx, 12 * sy, 58 * sx, 12 * sy); cubicTo(82 * sx, 13 * sy, 94 * sx, 28 * sy, 96 * sx, 42 * sy)
-                lineTo(99 * sx, 64 * sy); cubicTo(112 * sx, 66 * sy, 114 * sx, 80 * sy, 106 * sx, 88 * sy); lineTo(82 * sx, 90 * sy)
-                cubicTo(60 * sx, 86 * sy, 40 * sx, 84 * sy, 24 * sx, 82 * sy); close()
-            }, c)
-            drawPath(Path().apply { moveTo(56 * sx, 14 * sy); lineTo(104 * sx, 24 * sy); lineTo(114 * sx, 32 * sy); lineTo(98 * sx, 36 * sy); lineTo(66 * sx, 27 * sy); close() }, Color(0xFF9FB0C8))
-            drawPath(Path().apply { moveTo(86 * sx, 46 * sy); lineTo(99 * sx, 47 * sy); lineTo(100 * sx, 64 * sy); lineTo(88 * sx, 62 * sy); close() }, Color(0xFF121722))
-        }
-        DevKind.HELMET_FF -> {
-            drawPath(Path().apply {
-                moveTo(14 * sx, 66 * sy); cubicTo(8 * sx, 32 * sy, 32 * sx, 10 * sy, 62 * sx, 10 * sy); cubicTo(90 * sx, 10 * sy, 106 * sx, 32 * sy, 106 * sx, 56 * sy)
-                cubicTo(106 * sx, 74 * sy, 98 * sx, 86 * sy, 86 * sx, 88 * sy); lineTo(36 * sx, 84 * sy); cubicTo(22 * sx, 80 * sy, 15 * sx, 76 * sy, 14 * sx, 66 * sy); close()
-            }, c)
-            drawPath(Path().apply { moveTo(58 * sx, 34 * sy); cubicTo(80 * sx, 30 * sy, 98 * sx, 36 * sy, 104 * sx, 48 * sy); lineTo(104 * sx, 62 * sy); cubicTo(90 * sx, 60 * sy, 72 * sx, 58 * sy, 58 * sx, 56 * sy); close() }, Color(0xFF3B4C6B))
-            drawRect(Color(0xFF9FB0C8), P(20f, 20f), Size(18 * sx, 5 * sy))
-        }
-        DevKind.WHEEL -> {
-            drawRoundRect(c, P(28f, 8f), Size(64 * sx, 60 * sy), androidx.compose.ui.geometry.CornerRadius(10f))
-            drawCircle(Color(0xFF0B0E14), 30 * sy, P(60f, 66f))
-            drawCircle(c, 30 * sy, P(60f, 66f), style = Stroke(5f))
-            drawRect(Color(0xFF9FB0C8), P(48f, 2f), Size(24 * sx, 8 * sy))
-        }
-    }
+    drawRoundRect(c, P(28f, 8f), Size(64 * sx, 60 * sy), androidx.compose.ui.geometry.CornerRadius(10f))
+    drawCircle(Color(0xFF0B0E14), 30 * sy, P(60f, 66f))
+    drawCircle(c, 30 * sy, P(60f, 66f), style = Stroke(5f))
+    drawRect(Color(0xFF9FB0C8), P(48f, 2f), Size(24 * sx, 8 * sy))
 }
 
 /** Цвет точки без кадра с платы: та же логика, что в прошивке, упрощённо. */

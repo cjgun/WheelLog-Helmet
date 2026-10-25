@@ -11,8 +11,14 @@
 #include <esp_wifi.h>
 #include <ArduinoOTA.h>
 #include <WiFiUdp.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <Update.h>
 #include "protokol.h"
-#include "sekrety.h"  // WIFI_SSID, WIFI_PASS, OTA_PASS - создаётся на MiniGUN, в git нет
+#if __has_include("sekrety.h")
+#include "sekrety.h"  // OTA_PASS для обновления с MiniGUN; создаётся на MiniGUN, в git нет
+#endif
+// Сеть и пароль Wi-Fi в прошивке не хранятся: их передаёт приложение (characteristic net), лежат в NVS.
 
 // Выводы платы - менять только здесь
 #if defined(BOARD_C3)
@@ -20,12 +26,14 @@
 #define PIN_PLATA   8      // синий светодиод на плате, горит по LOW
 #define PIN_RIM     7      // ключ обода: HIGH - обод погашен (BC547 закрывает MOSFET)
 #define HOST_NAME   "cj-wheel"
+#define BOARD_ID    "c3-mini"
 #define PIN_WHEEL_RX 3     // провод RXD модуля Bluetooth колеса (только приём)
 #else
 #define PIN_LENTA   18     // nanoESP32-C6
 #define PIN_PLATA   8      // RGB-светодиод на плате
 #define PIN_RIM     -1
 #define HOST_NAME   "cj-helmet"
+#define BOARD_ID    "nano-c6"
 #define PIN_WHEEL_RX 20    // провод RXD модуля Bluetooth колеса (только приём)
 #endif
 #define MAX_LEDS    300
@@ -37,7 +45,41 @@
 #define HILITE_MS   10000  // подсветка сегмента из приложения
 #define FRAME_MS    200    // кадр ленты в приложение, 5 раз в секунду
 #define ESPNOW_CH   1
-#define WIFI_AFTER_MS 30000  // телефона нет столько - дома, подключаемся к Wi-Fi для обновления
+#define UPD_BASE    "https://cjgun.ru/assets/proshivka/"  // <плата>.json: {"md5": "...", "url": "..."}
+
+// Корень цепочки cjgun.ru (Let's Encrypt): ISRG Root X1, действует до 2035 года
+static const char ROOT_CA[] = R"(-----BEGIN CERTIFICATE-----
+MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
+WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
+ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
+MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
+h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
+0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
+T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
+B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
+B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
+KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
+OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
+jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
+qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
+rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
+hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
+ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
+3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
+NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
+ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
+TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC
+jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc
+oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq
+4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA
+mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
+emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
+-----END CERTIFICATE-----
+)";
 
 static Config cfg;
 static const Config CFG_DEFAULT = {
@@ -618,29 +660,166 @@ static void wheelTick(uint32_t now) {
   }
 }
 
-// ---------- Wi-Fi и обновление по воздуху ----------
-// Дома (телефон не подключён дольше WIFI_AFTER_MS) плата подключается к домашней сети и ждёт
-// прошивку с MiniGUN (/opt/helmet/obnovit.sh). Подключился телефон - Wi-Fi отпускается,
-// ESP-NOW возвращается на свой канал. Настройки в NVS при обновлении сохраняются.
+// ---------- имя, Wi-Fi и обновление по воздуху ----------
+// Wi-Fi выключен, пока приложение не включит: радио одно, а ESP-NOW со шлемом живёт на своём канале.
+// Сеть и пароль приходят из приложения и лежат в NVS. «upd» - плата сама берёт прошивку с cjgun.ru
+// (TLS с проверкой сертификата, MD5 файла из описания), пишет во второй раздел и перезапускается.
+// Настройки ленты в NVS при обновлении сохраняются.
+static char bleName[NAME_MAX + 1];
+static String wifiSsid, wifiPass;
 static bool wifiOn = false, otaReady = false;
 static volatile bool gotIp = false;
-static uint32_t phoneSeen = 0;
+static volatile bool updWant = false, updBusy = false;
+static char updState[64] = "нет";
+
+static void netLoad() {
+  Preferences p;
+  p.begin("net", true);
+  String n = p.getString("name", "");
+  wifiSsid = p.getString("ssid", "");
+  wifiPass = p.getString("pass", "");
+  p.end();
+  if (n.length()) snprintf(bleName, sizeof bleName, "%s", n.c_str());
+  else {
+    uint8_t m[6];
+    WiFi.macAddress(m);
+    snprintf(bleName, sizeof bleName, "%s-%02X%02X", cfg.kind == 1 ? NAME_WHEEL : NAME_HELMET, m[4], m[5]);
+  }
+}
+
+static void setWifi(bool on) {
+  if (on == wifiOn) return;
+  if (on) {
+    if (!wifiSsid.length()) { snprintf(updState, sizeof updState, "сеть не задана"); return; }
+    WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
+    Serial.printf("Wi-Fi: подключаюсь к %s\n", wifiSsid.c_str());
+  } else {
+    WiFi.disconnect(false, false);
+    esp_wifi_set_channel(ESPNOW_CH, WIFI_SECOND_CHAN_NONE);  // ESP-NOW обратно на свой канал
+    Serial.println("Wi-Fi: выключен");
+  }
+  wifiOn = on;
+}
+
+static String netStatus() {
+  String s = "name=" + String(bleName) + "\nssid=" + wifiSsid + "\nwifi=";
+  s += !wifiOn ? "off" : WiFi.isConnected() ? WiFi.localIP().toString() : "подключение";
+  s += "\nupd=" + String(updState) + "\nver=" __DATE__ " " __TIME__ "\nboard=" BOARD_ID "\n";
+  return s;
+}
+
+static void netCmd(const String &c) {
+  Serial.printf("сеть: команда %s\n", c.startsWith("wifi=") ? "wifi=..." : c.c_str());
+  if (c.startsWith("name=")) {
+    String n = c.substring(5); n.trim();
+    if (n.length() > NAME_MAX) n = n.substring(0, NAME_MAX);
+    Preferences p; p.begin("net", false); p.putString("name", n); p.end();
+    snprintf(updState, sizeof updState, "имя сохранено, будет после перезапуска");
+  } else if (c.startsWith("wifi=")) {
+    int t = c.indexOf('\t');
+    if (t < 6) { snprintf(updState, sizeof updState, "нужно: сеть, табуляция, пароль"); return; }
+    wifiSsid = c.substring(5, t); wifiPass = c.substring(t + 1);
+    Preferences p; p.begin("net", false); p.putString("ssid", wifiSsid); p.putString("pass", wifiPass); p.end();
+    snprintf(updState, sizeof updState, "сеть сохранена");
+    if (wifiOn) { setWifi(false); setWifi(true); }
+  } else if (c == "wifi on") setWifi(true);
+  else if (c == "wifi off") { if (!updBusy) setWifi(false); }
+  else if (c == "upd") { if (!updBusy) { updWant = true; setWifi(true); } }
+  else if (c == "reboot") { delay(200); ESP.restart(); }
+}
+
+class NetCb : public NimBLECharacteristicCallbacks {
+  void onRead(NimBLECharacteristic *c, NimBLEConnInfo &ci) override { c->setValue(netStatus()); }
+  void onWrite(NimBLECharacteristic *c, NimBLEConnInfo &ci) override {
+    NimBLEAttValue v = c->getValue();
+    netCmd(String((const char *)v.data(), v.size()));
+  }
+};
+
+// Обновление идёт в своей задаче: лента и Bluetooth живут, приложение читает ход в upd=.
+// Вся работа - в updRun: TLS-клиент (~40 КБ) освобождается при выходе из неё, до vTaskDelete.
+static void updRun() {
+  uint32_t t0 = millis();
+  // адрес от роутера, а не просто связь: сразу после включения isConnected бывает раньше DHCP
+  while (!(WiFi.isConnected() && WiFi.localIP() != IPAddress(0, 0, 0, 0)) && millis() - t0 < 20000) delay(200);
+  delay(500);
+  if (!WiFi.isConnected()) { snprintf(updState, sizeof updState, "ошибка: нет Wi-Fi %s", wifiSsid.c_str()); return; }
+  WiFiClientSecure cl;
+  cl.setCACert(ROOT_CA);
+  HTTPClient http;
+  snprintf(updState, sizeof updState, "проверяю");
+  int code = 0;
+  String js;
+  for (int i = 0; i < 3 && code != 200; i++) {  // три попытки: первая бывает до готовности сети
+    if (i) delay(1500);
+    http.begin(cl, UPD_BASE BOARD_ID ".json");
+    code = http.GET();
+    js = code == 200 ? http.getString() : "";
+    http.end();
+  }
+  // описание короткое и своё: {"md5": "...", "url": "..."} - без библиотеки JSON
+  auto field = [&](const char *k) {
+    int i = js.indexOf(String("\"") + k + "\"");
+    if (i < 0) return String();
+    i = js.indexOf('"', js.indexOf(':', i) + 1);
+    int j = js.indexOf('"', i + 1);
+    return i < 0 || j < 0 ? String() : js.substring(i + 1, j);
+  };
+  String md5 = field("md5"), url = field("url");
+  if (code != 200 || md5.length() != 32 || !url.startsWith("https://")) {
+    snprintf(updState, sizeof updState, "ошибка: описание %d", code);
+  } else if (md5 == ESP.getSketchMD5()) {
+    snprintf(updState, sizeof updState, "уже последняя");
+  } else {
+    http.begin(cl, url);
+    code = http.GET();
+    int len = http.getSize();
+    if (code != 200 || len <= 0 || !Update.begin(len)) {
+      snprintf(updState, sizeof updState, "ошибка: файл %d", code);
+    } else {
+      Update.setMD5(md5.c_str());
+      WiFiClient *st = http.getStreamPtr();
+      uint8_t buf[1024];
+      int got = 0;
+      uint32_t last = millis();
+      while (got < len && millis() - last < 15000) {
+        int n = st->readBytes(buf, min((int)sizeof buf, len - got));
+        if (n <= 0) continue;
+        if (Update.write(buf, n) != (size_t)n) break;
+        got += n; last = millis();
+        snprintf(updState, sizeof updState, "загрузка %d%%", got * 100 / len);
+      }
+      if (got == len && Update.end()) {
+        snprintf(updState, sizeof updState, "готово, перезапуск");
+        Serial.println("обновление: готово, перезапуск");
+        http.end();
+        delay(1500);  // приложение успевает прочитать «готово»
+        ESP.restart();
+      }
+      Update.abort();
+      snprintf(updState, sizeof updState, "ошибка: %s", got == len ? Update.errorString() : "обрыв загрузки");
+    }
+    http.end();
+  }
+}
+
+static void updTask(void *) {
+  updBusy = true;
+  updRun();
+  Serial.printf("обновление: %s, свободно %u байт\n", updState, (unsigned)ESP.getFreeHeap());
+  setWifi(false);
+  updBusy = false;
+  vTaskDelete(NULL);
+}
 
 static void wifiTick(uint32_t now) {
-  bool busy = connected || (lastRelay && now - lastRelay < 5000);  // колесо едет со шлемом - не уходить
-  if (busy) {
-    phoneSeen = now;
-    if (wifiOn) {
-      WiFi.disconnect(false, false);
-      esp_wifi_set_channel(ESPNOW_CH, WIFI_SECOND_CHAN_NONE);
-      wifiOn = false;
-      Serial.println("Wi-Fi: отпущен");
-    }
-  } else if (!wifiOn && now - phoneSeen > WIFI_AFTER_MS) {
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-    wifiOn = true;
+  if (updWant) {
+    updWant = false;
+    snprintf(updState, sizeof updState, "подключаюсь к Wi-Fi");
+    xTaskCreate(updTask, "upd", 12288, NULL, 1, NULL);
   }
-  if (gotIp && !otaReady) {
+#ifdef OTA_PASS
+  if (gotIp && !otaReady) {  // своя сборка: пока Wi-Fi включён, можно залить и с MiniGUN
     ArduinoOTA.setHostname(HOST_NAME);
     ArduinoOTA.setPassword(OTA_PASS);
     ArduinoOTA.onStart([]() { lenta.clear(); lenta.show(); Serial.println("OTA: начало"); });
@@ -649,11 +828,12 @@ static void wifiTick(uint32_t now) {
     ArduinoOTA.begin();
     otaReady = true;
   }
+  if (otaReady && wifiOn) ArduinoOTA.handle();
+#endif
   if (gotIp) {
     gotIp = false;
-    Serial.printf("Wi-Fi: %s, обновление по воздуху ждёт\n", WiFi.localIP().toString().c_str());
+    Serial.printf("Wi-Fi: %s\n", WiFi.localIP().toString().c_str());
   }
-  if (otaReady) ArduinoOTA.handle();
 }
 
 // ---------- состояние ----------
@@ -671,7 +851,8 @@ static void sendState(uint32_t now) {
   if (connected) chrState->notify();
 }
 
-// Команды по USB: l/r/b/o - поворот, c - разметка вкл/выкл, d - настройки по умолчанию, s - состояние
+// Команды по USB: l/r/b/o - поворот, c - разметка вкл/выкл, d - настройки по умолчанию, s - состояние,
+// w - Wi-Fi вкл/выкл (сеть из приложения), u - обновиться с cjgun.ru, n - имя, сеть, обновление
 static void serialCmd() {
   while (Serial.available()) {
     char ch = Serial.read();
@@ -681,6 +862,9 @@ static void serialCmd() {
     else if (ch == 'o') setTurn(T_OFF);
     else if (ch == 'c') { cfg.flags ^= CFG_CALIBRATE; cfgSave(); chrConfig->setValue((uint8_t *)&cfg, sizeof cfg); }
     else if (ch == 'd') { cfg = CFG_DEFAULT; cfgSave(); chrConfig->setValue((uint8_t *)&cfg, sizeof cfg); }
+    else if (ch == 'w') netCmd(wifiOn ? "wifi off" : "wifi on");
+    else if (ch == 'u') netCmd("upd");
+    else if (ch == 'n') Serial.print(netStatus());
     else if (ch == 's') {
       Serial.printf("режим %d поворот %d a=%.1f v=%d pwm %u заряд %u пакетов %u отброшено %u ток %u мА, сегментов %u, точек %u, Wi-Fi %s, прошивка %s\n",
                     mode, turn, accelF / 10, speed, pwm, battery, packets, bad, lastMa, cfg.nseg, cfg.num_leds,
@@ -719,7 +903,8 @@ void setup() {
     esp_now_add_peer(&peer);
   }
 
-  const char *name = cfg.kind == 1 ? NAME_WHEEL : NAME_HELMET;
+  netLoad();
+  const char *name = bleName;
   NimBLEDevice::init(name);
   NimBLEDevice::setMTU(247);
   NimBLEServer *srv = NimBLEDevice::createServer();
@@ -734,11 +919,16 @@ void setup() {
   svc->createCharacteristic(UUID_CMD, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR)->setCallbacks(new CmdCb());
   chrFrame = svc->createCharacteristic(UUID_FRAME, NIMBLE_PROPERTY::NOTIFY);
   chrFrame->setCallbacks(new FrameCb());
+  svc->createCharacteristic(UUID_NET, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE)->setCallbacks(new NetCb());
   svc->start();
+  // в рекламе сервис (16 + 2 байта), имя - в ответе на скан: иначе длинное имя не влезает в 31 байт
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
-  adv->setName(name);
-  adv->addServiceUUID(UUID_SERVICE);
-  adv->enableScanResponse(true);
+  NimBLEAdvertisementData ad, sr;
+  ad.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
+  ad.addServiceUUID(UUID_SERVICE);
+  sr.setName(name);
+  adv->setAdvertisementData(ad);
+  adv->setScanResponseData(sr);
   adv->start();
 
   Serial.printf("%s: лента GPIO%d, %u точек, %u сегментов; BLE %s; ESP-NOW канал %d, MAC %s\n",
