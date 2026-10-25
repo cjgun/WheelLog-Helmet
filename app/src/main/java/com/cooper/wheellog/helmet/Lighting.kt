@@ -128,6 +128,15 @@ object Lighting {
         reconcile()
     }
 
+    /** Только название: без перебора связей, иначе при наборе теряются буквы. */
+    fun rename(id: String, name: String) {
+        val i = devices.indexOfFirst { it.id == id }
+        if (i < 0 || devices[i].name == name) return
+        devices[i] = devices[i].copy(name = name)
+        main.removeCallbacks(saveLater); main.postDelayed(saveLater, 500)
+    }
+    private val saveLater = Runnable { save() }
+
     fun add(kind: DevKind): String {
         var n = 1
         while (devices.any { it.id == "d$n" }) n++
@@ -148,10 +157,10 @@ object Lighting {
     fun setActive(id: String) { activeHelmet.value = id; save(); reconcile() }
     fun setEnabled(on: Boolean) { enabled.value = on; save(); reconcile() }
 
-    /** Связи держим с активным шлемом и с колесом; остальные отключаем. */
+    /** Связи держим со всеми устройствами, где стоит галка оборудования и выбран адрес. */
     fun reconcile() {
         if (!::ctx.isInitialized) return
-        val want = devices.filter { enabled.value && (it.id == activeHelmet.value || it.kind == DevKind.WHEEL) }
+        val want = devices.filter { enabled.value }
         val espWant = want.filter { it.espOn && it.espAddr.isNotEmpty() }.associateBy { it.id }
         val zgWant = want.filter { it.zgOn && it.zgAddr.isNotEmpty() }.associateBy { it.id }
         esp.keys.toList().forEach { id -> if (espWant[id]?.espAddr != esp[id]?.address) { esp.remove(id)?.close() } }
@@ -193,9 +202,9 @@ object Lighting {
         b.put(pwm.toByte()).put(bat.toByte()).put(0)
         val pkt = b.array()
         esp.values.forEach { it.sendData(pkt) }
-        // режим без платы: считает телефон по порогам устройства
-        val helmet = device(activeHelmet.value)
-        detector.cfg = (helmet ?: devices.firstOrNull())?.cfgObj() ?: Cfg()
+        // режим без платы: считает телефон по порогам шлема с ZENGGE без платы (или первого устройства)
+        val own = devices.firstOrNull { it.zgOn && !it.espOn } ?: devices.firstOrNull()
+        detector.cfg = own?.cfgObj() ?: Cfg()
         detector.feed(now, connected, speed, current, pitch, pwm)
         main.post { refreshMode() }
     }
@@ -204,8 +213,9 @@ object Lighting {
     internal fun refreshMode() {
         val now = SystemClock.elapsedRealtime()
         var m: Int; var t: Int
-        val board = esp[activeHelmet.value]?.takeIf { it.linked && it.mode.intValue >= 0 }
-            ?: esp.values.firstOrNull { it.linked && it.mode.intValue >= 0 }
+        // плата шлема главнее платы колеса: у шлема свои пороги и поворотник
+        val board = esp.entries.filter { it.value.linked && it.value.mode.intValue >= 0 }
+            .sortedBy { if (device(it.key)?.isHelmet == true) 0 else 1 }.firstOrNull()?.value
         if (board != null) { m = board.mode.intValue; t = board.turn.intValue }
         else { m = detector.mode; t = 0 }
         if (now < testUntil) {

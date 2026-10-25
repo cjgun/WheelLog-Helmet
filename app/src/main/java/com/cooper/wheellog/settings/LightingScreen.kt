@@ -85,7 +85,7 @@ private fun hubPart(open: (String) -> Unit) {
             Text("Режим: ${Mode.names[mode] ?: "?"}" + when (turn) { 1 -> ", поворот налево"; 2 -> ", поворот направо"; 3 -> ", аварийка"; else -> "" },
                 fontWeight = FontWeight.Bold)
         }
-        Text("Активный шлем - тот, к которому подключается телефон. Колесо подключается всегда.",
+        Text("Телефон подключается ко всему, где отмечено оборудование. Нажмите устройство, чтобы настроить.",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
     }
     Lighting.devices.forEach { d -> deviceRow(d, open) }
@@ -98,8 +98,9 @@ private fun hubPart(open: (String) -> Unit) {
 
 @Composable
 private fun deviceRow(d: LightDevice, open: (String) -> Unit) {
-    val active = Lighting.activeHelmet.value == d.id
     val linkOn = (Lighting.esp[d.id]?.linked == true) || (Lighting.zg[d.id]?.linked == true)
+    val st = listOfNotNull(Lighting.esp[d.id]?.let { "плата: " + it.status.value }, Lighting.zg[d.id]?.let { "ZENGGE: " + it.status.value })
+        .joinToString(" · ").ifEmpty { if (d.espOn || d.zgOn) "оборудование не выбрано: нажмите и найдите" else "без оборудования" }
     Lighting.frameTick.intValue  // перерисовать при смене связи
     Surface(shape = RoundedCornerShape(12.dp),
         color = if (Lighting.selected.value == d.id) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
@@ -109,14 +110,14 @@ private fun deviceRow(d: LightDevice, open: (String) -> Unit) {
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(d.name, fontWeight = FontWeight.Bold)
-                Text(d.kind.title + (if (active) " · активный" else ""), style = MaterialTheme.typography.bodySmall)
+                Text(d.kind.title, style = MaterialTheme.typography.bodySmall)
+                Text(st, style = MaterialTheme.typography.bodySmall, color = if (linkOn) Color(0xFF66BB6A) else MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (d.espOn) tag("плата CJ")
                     if (d.zgOn) tag("ZENGGE")
                     if (!d.espOn && !d.zgOn) tag("без оборудования")
                 }
             }
-            if (d.isHelmet) RadioButton(selected = active, onClick = { Lighting.setActive(d.id) })
             Box(Modifier.size(12.dp).background(if (linkOn) Color(0xFF43A047) else Color.Gray, CircleShape))
         }
     }
@@ -169,12 +170,15 @@ private fun devicePart(id: String, wide: Boolean) {
             if (link != null) Text("лента ${link.ma.intValue} мА", style = MaterialTheme.typography.bodySmall)
         }
         var name by remember(id) { mutableStateOf(d.name) }
-        OutlinedTextField(name, { name = it; Lighting.update(id) { x -> x.copy(name = it.take(30)) } },
+        OutlinedTextField(name, { name = it.take(30); Lighting.rename(id, name) },
             label = { Text("Название (впишите свою модель)") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
         if (d.isHelmet) {
             Text("Вид", Modifier.padding(top = 6.dp))
             chips(listOf(DevKind.HELMET_FF.title, DevKind.HELMET_MX.title), if (d.kind == DevKind.HELMET_MX) 1 else 0) { i ->
-                Lighting.update(id) { it.copy(kind = if (i == 1) DevKind.HELMET_MX else DevKind.HELMET_FF) }
+                val k = if (i == 1) DevKind.HELMET_MX else DevKind.HELMET_FF
+                Lighting.update(id) { it.copy(kind = k) }
+                // сменили вид - правка сегментов начинается с шаблона этого вида (на плату уйдёт по «Записать»)
+                edits[id] = Cfg(edits[id] ?: d.cfgObj().b).copy { segs = Cfg.forKind(k).segs }.b
             }
         }
     }
@@ -210,7 +214,7 @@ private fun boardCard(d: LightDevice, link: EspLink?) {
     val scanning by Lighting.scanning
     card(if (d.isHelmet) "Плата шлема" else "Плата колеса") {
         Text(if (d.espAddr.isEmpty()) "Плата не выбрана" else "Адрес: ${d.espAddr}")
-        Text("Связь: " + (link?.status?.value ?: if (d.id == Lighting.activeHelmet.value || !d.isHelmet) "нет" else "шлем не активный"))
+        Text("Связь: " + (link?.status?.value ?: "нет"))
         if (link != null) Text("Отправлено пакетов: ${link.sent.intValue}", style = MaterialTheme.typography.bodySmall)
         Button(onClick = { found.clear(); Lighting.startScan(false) { n, a -> found[a] = n } }, modifier = Modifier.padding(top = 6.dp)) {
             Text(if (scanning) "Ищу..." else "Найти плату")
@@ -399,7 +403,7 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
     val mode = link?.mode?.intValue ?: Lighting.mode.intValue
     val turn = link?.turn?.intValue ?: Lighting.turn.intValue
     val sel = selSeg.intValue
-    Canvas(Modifier.fillMaxWidth().aspectRatio(1.25f).padding(vertical = 4.dp)) {
+    Canvas(Modifier.fillMaxWidth().aspectRatio(if (d.kind == DevKind.WHEEL) 1.25f else 0.95f).padding(vertical = 4.dp)) {
         val pts = if (d.kind == DevKind.WHEEL) wheelLayout(segs, size) else helmetLayout(segs, d.kind == DevKind.HELMET_MX, size)
         if (d.kind == DevKind.WHEEL) drawWheelBody(size) else drawHelmetBody(d.kind == DevKind.HELMET_MX, size)
         var idx = 0
@@ -432,9 +436,35 @@ private fun DrawScope.led(p: Offset, c: Color, k: Float) {
 private val RING = listOf(Role.FRONT_R, Role.SIDE_R, Role.BACK, Role.SIDE_L, Role.FRONT_L)
 
 /** Точки шлема: кольцо по ролям пропорционально числу точек, стоп-полоса внутри сзади, козырёк впереди. */
+/**
+ * Шлем сверху, перед вверху. Форма по фото владельца: голова овальная, длина больше ширины примерно на треть,
+ * спереди шире, к затылку уже (яйцо). Мотокросс длиннее и с козырьком впереди.
+ */
+private class Shell(mx: Boolean, sz: Size) {
+    val cx = sz.width / 2
+    val cy = sz.height * (if (mx) 0.56f else 0.52f)
+    val rx = sz.width * (if (mx) 0.30f else 0.33f)
+    val ry = sz.height * (if (mx) 0.37f else 0.38f)
+    private val egg = if (mx) -0.06f else 0.10f   // мотокросс к подбородку уже
+    /** Точка на контуре: угол от оси X (−90° - перед), k - масштаб от контура. */
+    fun at(deg: Float, k: Float = 1f): Offset {
+        val a = Math.toRadians(deg.toDouble())
+        val s = sin(a).toFloat(); val c = cos(a).toFloat()
+        return Offset(cx + rx * k * c * (1f - egg * s), cy + ry * k * s)
+    }
+    fun path(k: Float, d: Float = 0f): Path = Path().apply {
+        for (i in 0..72) {
+            val p = at(i * 5f, k)
+            val q = Offset(p.x + (p.x - cx) / maxOf(1f, kotlin.math.abs(p.x - cx) + kotlin.math.abs(p.y - cy)) * d, p.y)
+            if (i == 0) moveTo(q.x, q.y) else lineTo(q.x, q.y)
+        }
+        close()
+    }
+}
+
+/** Точки шлема: кольцо по ролям пропорционально числу точек, стоп-полоса внутри сзади, козырёк впереди. */
 private fun helmetLayout(segs: List<Seg>, mx: Boolean, sz: Size): List<Offset> {
-    val cx = sz.width / 2; val cy = sz.height / 2 + if (mx) sz.height * 0.04f else 0f
-    val rx = sz.width * 0.30f; val ry = sz.height * 0.36f
+    val sh = Shell(mx, sz)
     val out = Array(segs.sumOf { it.count }) { Offset.Zero }
     val gap = if (mx) 56f else 14f; val span = 360f - gap
     val ringRoles = RING + -1
@@ -445,8 +475,7 @@ private fun helmetLayout(segs: List<Seg>, mx: Boolean, sz: Size): List<Offset> {
         if (s.role != role) return@forEachIndexed
         for (i in 0 until s.count) {
             val q = if (s.rev) s.count - 1 - i else i
-            val a = Math.toRadians((gap / 2 + span * (k + q + 0.5f) / tot - 90f).toDouble())
-            out[starts[si] + i] = Offset(cx + rx * cos(a).toFloat(), cy + ry * sin(a).toFloat())
+            out[starts[si] + i] = sh.at(gap / 2 + span * (k + q + 0.5f) / tot - 90f)
         }
         k += s.count
     }
@@ -454,9 +483,9 @@ private fun helmetLayout(segs: List<Seg>, mx: Boolean, sz: Size): List<Offset> {
         for (i in 0 until s.count) {
             val f = if (s.count == 1) 0.5f else i / (s.count - 1f)
             when (s.role) {
-                Role.STOP -> out[starts[si] + i] = Offset(cx - rx * 0.42f + rx * 0.84f * f, cy + ry * 0.8f)
-                Role.PEAK_R -> out[starts[si] + i] = Offset(cx + rx * 0.62f + i * sz.width * 0.02f, cy - ry - sz.height * 0.08f + i * 4f)
-                Role.PEAK_L -> out[starts[si] + i] = Offset(cx - rx * 0.62f - i * sz.width * 0.02f, cy - ry - sz.height * 0.08f + i * 4f)
+                Role.STOP -> out[starts[si] + i] = Offset(sh.cx - sh.rx * 0.38f + sh.rx * 0.76f * f, sh.cy + sh.ry * 0.78f)
+                Role.PEAK_R -> out[starts[si] + i] = Offset(sh.cx + sh.rx * 0.45f + i * sz.width * 0.03f, sh.cy - sh.ry - sz.height * 0.07f - i * 6f)
+                Role.PEAK_L -> out[starts[si] + i] = Offset(sh.cx - sh.rx * 0.45f - i * sz.width * 0.03f, sh.cy - sh.ry - sz.height * 0.07f - i * 6f)
                 Role.OFF -> out[starts[si] + i] = Offset(-100f, -100f)
             }
         }
@@ -488,18 +517,27 @@ private fun wheelLayout(segs: List<Seg>, sz: Size): List<Offset> {
 }
 
 private fun DrawScope.drawHelmetBody(mx: Boolean, sz: Size) {
-    val cx = sz.width / 2; val cy = sz.height / 2 + if (mx) sz.height * 0.04f else 0f
-    val rx = sz.width * 0.30f; val ry = sz.height * 0.36f
-    drawOval(Color(0xFF2A3446), Offset(cx - rx - 14, cy - ry - 14), Size((rx + 14) * 2, (ry + 14) * 2))
-    drawOval(Color(0xFF141A24), Offset(cx - rx + 12, cy - ry + 12), Size((rx - 12) * 2, (ry - 12) * 2))
+    val sh = Shell(mx, sz)
+    drawPath(sh.path(1.10f), Color(0xFF2A3446))   // оболочка
+    drawPath(sh.path(0.90f), Color(0xFF141A24))   // внутри - голова
     if (mx) {
+        // козырёк: узкий и длинный, впереди выступает за оболочку
+        val l = sh.at(-128f, 1.04f); val r = sh.at(-52f, 1.04f)
         val p = Path().apply {
-            moveTo(cx - rx * 0.85f, cy - ry * 0.55f); lineTo(cx - rx * 0.75f, cy - ry - sz.height * 0.1f)
-            quadraticBezierTo(cx, cy - ry - sz.height * 0.16f, cx + rx * 0.75f, cy - ry - sz.height * 0.1f)
-            lineTo(cx + rx * 0.85f, cy - ry * 0.55f); close()
+            moveTo(l.x, l.y); lineTo(sh.cx - sh.rx * 0.20f, sh.cy - sh.ry * 1.50f)
+            quadraticBezierTo(sh.cx, sh.cy - sh.ry * 1.58f, sh.cx + sh.rx * 0.20f, sh.cy - sh.ry * 1.50f)
+            lineTo(r.x, r.y); close()
         }
         drawPath(p, Color(0xFF3A4862))
-    } else drawArc(Color(0xFF3B4C6B), 180f, 180f, true, Offset(cx - rx * 0.62f, cy - ry - 4), Size(rx * 1.24f, 44f))
+    } else {
+        // визор спереди: полоса по контуру
+        val p = Path().apply {
+            for (i in 0..24) { val q = sh.at(-150f + i * 5f, 1.02f); if (i == 0) moveTo(q.x, q.y) else lineTo(q.x, q.y) }
+            for (i in 24 downTo 0) { val q = sh.at(-150f + i * 5f, 0.93f); lineTo(q.x, q.y) }
+            close()
+        }
+        drawPath(p, Color(0xFF3B4C6B))
+    }
 }
 
 private fun DrawScope.drawWheelBody(sz: Size) {
