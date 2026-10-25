@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432" width="432" height="432">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>
+    <linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a505c"/><stop offset="1" stop-color="#262a32"/>
+    </linearGradient>
+    <linearGradient id="visor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1f28"/><stop offset="1" stop-color="#0b0d12"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(16 14) scale(0.86)">
+  <!-- свечение ленты -->
+  <path d="M300 300 L174 302 C142 302 125 282 121 252 C117 220 125 190 141 166" fill="none" stroke="#ff2a2a" stroke-width="22" stroke-linecap="round" filter="url(#glow)" opacity="0.9"/>
+  <!-- корпус шлема -->
+  <path d="M120 250 C110 170 165 110 235 108 C300 106 340 150 345 205 L348 250 C349 282 330 302 300 305 L172 307 C140 307 124 286 120 250 Z" fill="url(#shell)" stroke="#6b7280" stroke-width="3"/>
+  <!-- блик сверху -->
+  <path d="M160 160 C185 130 225 120 262 124" fill="none" stroke="#7a8190" stroke-width="7" stroke-linecap="round" opacity="0.6"/>
+  <!-- визор -->
+  <path d="M250 166 C292 162 330 178 341 210 L343 240 C302 243 262 238 245 224 C237 206 239 180 250 166 Z" fill="url(#visor)"/>
+  <path d="M262 176 C292 174 318 184 330 202" fill="none" stroke="#E07B45" stroke-width="7" stroke-linecap="round"/>
+  <!-- лента стоп-сигнала -->
+  <path d="M300 300 L174 302 C142 302 125 282 121 252 C117 220 125 190 141 166" fill="none" stroke="#ff3b3b" stroke-width="12" stroke-linecap="round"/>
+  <path d="M296 300 L176 302" fill="none" stroke="#ffb3b3" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  </g>
+</svg>
