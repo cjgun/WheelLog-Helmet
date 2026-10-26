@@ -164,7 +164,7 @@ private fun devicePart(id: String, wide: Boolean) {
     // настройки платы: правка начинается с копии с платы или из памяти приложения
     val boardCfg = link?.config?.value
     LaunchedEffect(boardCfg) {
-        if (boardCfg != null && boardCfg.size == Cfg.SIZE && boardCfg[0].toInt() == Cfg.VER) edits[id] = boardCfg.copyOf()
+        if (Cfg.isBoardCfg(boardCfg)) edits[id] = boardCfg!!.copyOf()
     }
     if (edits[id] == null) edits[id] = d.cfgObj().b
 
@@ -208,6 +208,7 @@ private fun devicePart(id: String, wide: Boolean) {
     if (d.espOn) {
         boardCard(d, link)
         segCard(d, link)
+        if (d.isHelmet) fxCard(d, link)
         settingsCards(d, link)
     }
     if (d.zgOn) zenggeCard(d, zl)
@@ -236,6 +237,13 @@ private fun boardCard(d: LightDevice, link: EspLink?) {
     }
     if (link != null && link.linked) netCard(link)
 }
+
+/** Сеть Wi-Fi, к которой подключён телефон; пусто - не знаем (нет разрешения на место или Wi-Fi выключен). */
+@Suppress("DEPRECATION")
+private fun phoneSsid(ctx: android.content.Context): String = try {
+    val wm = ctx.applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+    wm.connectionInfo?.ssid?.trim('"')?.takeIf { it.isNotEmpty() && it != "<unknown ssid>" } ?: ""
+} catch (_: Exception) { "" }
 
 /** Имя платы в Bluetooth, Wi-Fi и обновление прошивки с cjgun.ru (characteristic net). */
 @Composable
@@ -267,7 +275,9 @@ private fun netCard(link: EspLink) {
         Text("Wi-Fi: " + when (wifi) { "off" -> "выключен"; "подключение" -> "подключается"; else -> "подключён, $wifi" } +
             (net["ssid"]?.takeIf { it.isNotEmpty() }?.let { ", сеть $it" } ?: ", сеть не задана"),
             fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
-        var ssid by remember(link) { mutableStateOf(net["ssid"] ?: "") }
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        // сеть, к которой подключён телефон, - подставить; пароль Android приложениям не отдаёт
+        var ssid by remember(link) { mutableStateOf(net["ssid"]?.takeIf { it.isNotEmpty() } ?: phoneSsid(ctx)) }
         var pass by remember(link) { mutableStateOf("") }
         OutlinedTextField(ssid, { ssid = it }, label = { Text("Сеть Wi-Fi") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(pass, { pass = it }, label = { Text("Пароль") }, singleLine = true,
@@ -280,10 +290,17 @@ private fun netCard(link: EspLink) {
             style = MaterialTheme.typography.bodySmall)
 
         Text("Прошивка: ${net["ver"] ?: "?"} · ${net["board"] ?: "?"}", modifier = Modifier.padding(top = 10.dp))
-        Button(onClick = { link.netCmd("upd") }, enabled = !busy, modifier = Modifier.padding(top = 4.dp)) { Text("Обновить прошивку") }
-        if (upd.isNotEmpty() && upd != "нет") Text("Обновление: $upd",
+        val ota = link.ota.value
+        val otaBusy = ota.startsWith("проверяю") || ota.startsWith("скачиваю") || ota.startsWith("отправка") || ota.startsWith("плата проверяет")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            if (link.hasOta) Button(onClick = { link.otaFromSite() }, enabled = !busy && !otaBusy) { Text("Обновить по Bluetooth") }
+            OutlinedButton(onClick = { link.netCmd("upd") }, enabled = !busy && !otaBusy) { Text(if (link.hasOta) "Через Wi-Fi" else "Обновить прошивку") }
+        }
+        if (ota.isNotEmpty()) Text("Bluetooth: $ota", color = if (ota.startsWith("ошибка")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        if (upd.isNotEmpty() && upd != "нет") Text("Плата: $upd",
             color = if (upd.startsWith("ошибка")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Плата сама скачает прошивку с cjgun.ru по сохранённой сети и проверит её. Около полутора минут, потом перезапуск.",
+        Text(if (link.hasOta) "По Bluetooth телефон сам скачает прошивку с cjgun.ru через свой интернет и передаст плате, сеть Wi-Fi не нужна. Около минуты, телефон держать рядом. Через Wi-Fi плата качает сама по сохранённой сети."
+            else "Плата сама скачает прошивку с cjgun.ru по сохранённой сети и проверит её. Около полутора минут, потом перезапуск.",
             style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -293,11 +310,13 @@ private fun netCard(link: EspLink) {
 private fun segCard(d: LightDevice, link: EspLink?) {
     val raw = edits[d.id] ?: return
     val c = Cfg(raw)
-    if (!c.ok) { card("Сегменты") { Text("Плата со старой прошивкой (${c.u8(0)}), нужна 4. Обновите прошивку.") }; return }
+    if (!c.ok) { card("Сегменты") { Text("Плата со старой прошивкой (${c.u8(0)}), нужна 4 или 5. Обновите прошивку.") }; return }
     val segs = c.segs
     val roles = if (d.isHelmet) Role.forHelmet else Role.forWheel
     fun put(list: List<Seg>) { edits[d.id] = c.copy { this.segs = list }.b }
+    fun put2(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
     var sel by selSeg
+    var colorSeg by remember(d.id) { mutableIntStateOf(-1) }
     card("Сегменты") {
         Text("Вся лента - одна цепочка от платы. Нажмите сегмент - он замигает на ${if (d.isHelmet) "шлеме" else "колесе"}.",
             style = MaterialTheme.typography.bodySmall)
@@ -305,7 +324,10 @@ private fun segCard(d: LightDevice, link: EspLink?) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                 .background(if (sel == i) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, RoundedCornerShape(8.dp))
                 .clickable { sel = if (sel == i) -1 else i; link?.cmd(2, if (sel == i) i else 255) }.padding(6.dp)) {
-                Box(Modifier.size(14.dp).background(Color(Role.colors[s.role]), RoundedCornerShape(4.dp)))
+                val own = if (c.hasFx && i < Cfg.MAX_SEG) c.segRgb(i).takeIf { rgb -> rgb.any { it > 0 } } else null
+                Box(Modifier.size(22.dp)
+                    .background(own?.let { Color(it[0], it[1], it[2]) } ?: Color(Role.colors[s.role]), RoundedCornerShape(5.dp))
+                    .clickable(enabled = c.hasFx) { colorSeg = if (colorSeg == i) -1 else i })
                 Spacer(Modifier.width(8.dp))
                 Text("${i + 1}. ${Role.names[s.role]}" + if (s.rev) " ↺" else "", Modifier.weight(1f))
                 stepBtn("-10") { put(segs.toMutableList().also { it[i] = s.copy(count = max(0, s.count - 10)) }) }
@@ -315,6 +337,10 @@ private fun segCard(d: LightDevice, link: EspLink?) {
                 stepBtn("+10") { put(segs.toMutableList().also { it[i] = s.copy(count = minOf(300, s.count + 10)) }) }
             }
         }
+        if (colorSeg in segs.indices && c.hasFx) {
+            Text("Свой цвет сегмента ${colorSeg + 1} (горит в габарите; стоп и повороты - как всегда)", Modifier.padding(top = 6.dp))
+            colorPicker(c.segRgb(colorSeg), allowNone = true) { rgb -> put2 { setSegRgb(colorSeg, rgb) } }
+        } else if (c.hasFx) Text("Нажми цветной квадратик сегмента, чтобы выбрать ему свой цвет.", style = MaterialTheme.typography.bodySmall)
         val s = segs.getOrNull(sel)
         if (s != null) {
             Text("Роль сегмента ${sel + 1}", Modifier.padding(top = 6.dp))
@@ -346,12 +372,76 @@ private fun stepBtn(t: String, f: () -> Unit) {
 private fun writeRow(d: LightDevice, link: EspLink?, c: Cfg) {
     val okSegs = c.segs.isNotEmpty() && c.segs.sumOf { it.count } in 1..300
     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Button(onClick = { link?.writeConfig(c.b) }, enabled = okSegs && link?.linked == true) {
+        Button(onClick = { link?.writeConfig(c.forBoard()) }, enabled = okSegs && link?.linked == true) {
             Text(if (d.isHelmet) "Записать в шлем" else "Записать в колесо")
         }
-        OutlinedButton(onClick = { edits[d.id] = (link?.config?.value?.takeIf { it.size == Cfg.SIZE } ?: d.cfgObj().b).copyOf() }) { Text("Отменить") }
+        OutlinedButton(onClick = { edits[d.id] = (link?.config?.value?.takeIf { Cfg.isBoardCfg(it) } ?: d.cfgObj().b).copyOf() }) { Text("Отменить") }
     }
     if (link?.linked != true) Text("Плата не на связи - запись станет доступна, когда подключится", style = MaterialTheme.typography.bodySmall)
+}
+
+// ---------- эффект ----------
+private val PALETTE = listOf(intArrayOf(255, 0, 0), intArrayOf(255, 90, 0), intArrayOf(255, 160, 0), intArrayOf(255, 230, 0),
+    intArrayOf(120, 255, 0), intArrayOf(0, 220, 0), intArrayOf(0, 255, 156), intArrayOf(0, 200, 160), intArrayOf(0, 200, 255),
+    intArrayOf(0, 80, 255), intArrayOf(60, 0, 255), intArrayOf(122, 0, 255), intArrayOf(200, 0, 255), intArrayOf(255, 0, 160),
+    intArrayOf(255, 60, 90), intArrayOf(255, 255, 255))
+
+/** Палитра и ползунок оттенка; allowNone - кнопка «цвет роли» (0,0,0). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun colorPicker(cur: IntArray, allowNone: Boolean = false, onPick: (IntArray) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+        PALETTE.forEach { p ->
+            val on = p.contentEquals(cur)
+            Box(Modifier.size(30.dp).background(Color(p[0], p[1], p[2]), CircleShape)
+                .then(if (on) Modifier.background(Color.Transparent).padding(2.dp) else Modifier)
+                .clickable { onPick(p) }) {
+                if (on) Box(Modifier.align(Alignment.Center).size(10.dp).background(Color.Black, CircleShape))
+            }
+        }
+        if (allowNone) OutlinedButton(onClick = { onPick(intArrayOf(0, 0, 0)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("Цвет роли") }
+    }
+    var hue by remember { mutableFloatStateOf(0f) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Свой", Modifier.width(48.dp), style = MaterialTheme.typography.bodySmall)
+        Slider(value = hue, onValueChange = { hue = it }, onValueChangeFinished = {
+            val c = Color.hsv(hue, 1f, 1f); onPick(intArrayOf((c.red * 255).roundToInt(), (c.green * 255).roundToInt(), (c.blue * 255).roundToInt()))
+        }, valueRange = 0f..359f, modifier = Modifier.weight(1f))
+        Box(Modifier.size(22.dp).background(Color.hsv(hue, 1f, 1f), CircleShape))
+    }
+}
+
+@Composable
+private fun fxCard(d: LightDevice, link: EspLink?) {
+    val raw = edits[d.id] ?: return
+    val c = Cfg(raw)
+    if (!d.espOn) return
+    if (!c.hasFx) {
+        card("Эффект") { Text("Эффекты и свои цвета появятся после обновления прошивки платы.", style = MaterialTheme.typography.bodySmall) }
+        return
+    }
+    fun upd(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
+    card("Эффект") {
+        chips(Fx.names, c.fx) { i -> upd { fx = i; Fx.defaults[i]?.let { (a, b) -> fxRgb1 = a; fxRgb2 = b } } }
+        Text(Fx.hints.getOrElse(c.fx) { "" }, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+        if (c.fx != Fx.CLASSIC) {
+            Text("Цвет 1", Modifier.padding(top = 8.dp), fontWeight = FontWeight.Bold)
+            colorPicker(c.fxRgb1) { rgb -> upd { fxRgb1 = rgb } }
+            if (c.fx !in listOf(Fx.SOLID, Fx.RAINBOW, Fx.ROAD, Fx.BATTERY)) {
+                Text("Цвет 2", Modifier.padding(top = 8.dp), fontWeight = FontWeight.Bold)
+                colorPicker(c.fxRgb2) { rgb -> upd { fxRgb2 = rgb } }
+            }
+            key(c.fx) {
+                slider("Скорость бега", c.fxSpeed.toFloat(), 25f, 250f, 5f, "%.0f %%", "100 % - как задумано; меньше - спокойнее") { v -> upd { fxSpeed = v.roundToInt() } }
+                slider("Яркость эффекта", c.fxBright.toFloat(), 10f, 255f, 5f, "%.0f") { v -> upd { fxBright = v.roundToInt() } }
+            }
+            switchRow("Перед белый", c.fxFlags and Fx.F_FRONT_WHITE != 0) { on -> upd { fxFlags = if (on) fxFlags or Fx.F_FRONT_WHITE else fxFlags and Fx.F_FRONT_WHITE.inv() } }
+            switchRow("Затылок всегда красный", c.fxFlags and Fx.F_BACK_RED != 0) { on -> upd { fxFlags = if (on) fxFlags or Fx.F_BACK_RED else fxFlags and Fx.F_BACK_RED.inv() } }
+        }
+        Text("Стоп, повороты и предупреждения колеса всегда поверх эффекта. На картинке эффект показан на 15 км/ч.",
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+        writeRow(d, link, c)
+    }
 }
 
 // ---------- настройки платы ----------
@@ -455,8 +545,9 @@ private fun zenggeCard(d: LightDevice, zl: ZenggeLink?) {
 private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
     Lighting.frameTick.intValue
     var t by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(Unit) { while (true) { delay(100); t = System.currentTimeMillis() } }
+    LaunchedEffect(Unit) { while (true) { delay(50); t = System.currentTimeMillis() } }
     val cfg = Cfg(edits[d.id] ?: d.cfgObj().b)
+    val fxSim = remember { FxSim() }
     val frame = link?.frame
     val segs = if (d.espOn) cfg.segs else listOf(Seg(130, -1))
     val total = segs.sumOf { it.count }
@@ -465,12 +556,22 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
     val sel = selSeg.intValue
     val segOf = IntArray(total); val jOf = IntArray(total)
     run { var i = 0; segs.forEachIndexed { si, s -> for (j in 0 until s.count) { segOf[i] = si; jOf[i] = j; i++ } } }
+    val us = if (d.kind == DevKind.WHEEL) FloatArray(0) else helmetU(segs)
+    // без кадра с платы эффект считается здесь же, на 15 км/ч - чтобы было видно, как он бежит
+    val fxOn = d.espOn && cfg.hasFx && cfg.fx != Fx.CLASSIC && d.isHelmet && mode != Mode.BRAKE && mode != Mode.WARN
+    if (fxOn) fxSim.tick(t, 15f, cfg.fxSpeed)
     fun colorAt(idx: Int): Color {
         val s = segs[segOf[idx]]
         return when {
             frame != null && frame.size >= total * 3 && d.espOn ->
                 Color((frame[idx * 3].toInt() and 0xff), (frame[idx * 3 + 1].toInt() and 0xff), (frame[idx * 3 + 2].toInt() and 0xff))
             s.role == -1 -> if (d.zgOn) zgColor(zl, idx, t) else Color.Black
+            fxOn && us[idx] >= 0f && !(turn != 0 && turnSide(s.role, turn)) -> {
+                val u = us[idx]; val dd = if (u <= 0.5f) u * 2 else (1 - u) * 2
+                fxSim.color(cfg, idx, dd, t / 1000f, 15f, 0f, 80).let { Color(it[0], it[1], it[2]) }
+            }
+            d.espOn && cfg.hasFx && segOf[idx] < Cfg.MAX_SEG && mode != Mode.BRAKE && cfg.segRgb(segOf[idx]).any { it > 0 } ->
+                cfg.segRgb(segOf[idx]).let { Color(it[0] / 255f * 0.6f, it[1] / 255f * 0.6f, it[2] / 255f * 0.6f) }
             else -> simColor(s.role, jOf[idx], s.count, mode, turn, t)
         }
     }
@@ -482,7 +583,6 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
         }
         return
     }
-    val us = helmetU(segs)
     val views = HelmetViews.forHelmet(d.kind == DevKind.HELMET_MX)
     Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (row in 0..1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -585,6 +685,9 @@ private fun DrawScope.silhouette(kind: DevKind, c: Color) {
     drawCircle(c, 30 * sy, P(60f, 66f), style = Stroke(5f))
     drawRect(Color(0xFF9FB0C8), P(48f, 2f), Size(24 * sx, 8 * sy))
 }
+
+/** Поворот идёт по этой стороне - эффект не рисуем, рисует simColor. */
+private fun turnSide(role: Int, turn: Int) = turn == 3 || (turn == 2 && Role.isRight(role)) || (turn == 1 && Role.isLeft(role))
 
 /** Цвет точки без кадра с платы: та же логика, что в прошивке, упрощённо. */
 private fun simColor(role: Int, j: Int, n: Int, mode: Int, turn: Int, t: Long): Color {

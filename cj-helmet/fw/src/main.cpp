@@ -14,6 +14,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Update.h>
+#include <esp_ota_ops.h>
 #include "protokol.h"
 #if __has_include("sekrety.h")
 #include "sekrety.h"  // OTA_PASS для обновления с MiniGUN; создаётся на MiniGUN, в git нет
@@ -105,6 +106,12 @@ static const Config CFG_DEFAULT = {
   85,     // warn_pwm
   RIM_FLASH_WARN,
   RELAY_SEND,
+  FX_CLASSIC,
+  {0, 200, 255}, {122, 0, 255},     // цвета эффекта: голубой и фиолетовый
+  FXF_FRONT_WHITE | FXF_BACK_RED,
+  100,    // fx_speed
+  160,    // fx_bright
+  {},     // seg_rgb: цвета ролей
 };
 static const neoPixelType STRIP_TYPES[] = {NEO_GRB, NEO_RGB, NEO_BRG, NEO_GRBW, NEO_RGBW};
 #define STRIP_TYPES_N (sizeof(STRIP_TYPES) / sizeof(STRIP_TYPES[0]))
@@ -118,6 +125,8 @@ static portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 
 // Общее состояние: пишут колбэки BLE и ESP-NOW, читает цикл отрисовки
 static volatile bool connected = false;
+static NimBLEServer *bleSrv = nullptr;
+static volatile uint16_t connHandle = 0;
 static volatile uint32_t lastPkt = 0;       // последний пакет от телефона
 static volatile uint8_t wheelFlags = 0;
 static volatile int16_t speed = 0, current = 0;
@@ -163,7 +172,7 @@ static bool cfgValid(const Config &c) {
          c.smooth_ms >= 20 && c.smooth_ms <= 2000 &&
          c.turn_sec >= 1 && c.turn_sec <= 120 && c.limit_ma >= 100 && c.limit_ma <= 10000 &&
          c.tilt_avg_s >= 1 && c.tilt_avg_s <= 60 && c.strip_type < STRIP_TYPES_N && c.kind <= 1 &&
-         c.warn_pwm <= 100;
+         c.warn_pwm <= 100 && c.fx < FX_COUNT && c.fx_speed >= 25 && c.fx_speed <= 250;
 }
 
 // Зоны v1-v3 -> пять сегментов шлема
@@ -263,6 +272,7 @@ static void onEspNow(const esp_now_recv_info_t *info, const uint8_t *d, int n) {
 class SrvCb : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer *s, NimBLEConnInfo &ci) override {
     connected = true;
+    connHandle = ci.getConnHandle();
     s->updateConnParams(ci.getConnHandle(), 12, 24, 0, 300);  // 15-30 мс
     Serial.printf("BLE: подключён %s\n", ci.getAddress().toString().c_str());
   }
@@ -284,9 +294,11 @@ class DataCb : public NimBLECharacteristicCallbacks {
 class CfgCb : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *c, NimBLEConnInfo &ci) override {
     NimBLEAttValue v = c->getValue();
-    Config nc;
-    if (v.size() == sizeof nc) {
-      memcpy(&nc, v.data(), sizeof nc);
+    Config nc = cfg;
+    // приложение старой версии пишет config v4 (74 байта): поля v5 остаются как были
+    if (v.size() == sizeof nc || (v.size() == CONFIG_SIZE[4] && v.data()[0] == 4)) {
+      memcpy(&nc, v.data(), v.size());
+      nc.ver = CONFIG_VER;
       nc.num_leds = segSum(nc);
       if (cfgValid(nc)) {
         cfg = nc;
@@ -457,6 +469,133 @@ static void drawCalibrate() {
   pxs(0, 0, 255, 0, 120);
 }
 
+// ---------- эффекты шлема ----------
+// Кольцо ленты: роли перед справа -> бок справа -> зад -> бок слева -> перед слева, доли по числу точек,
+// у подбородка зазор 14 градусов (как в приложении). d - доля пути ото лба (0) к затылку (1) по своей стороне.
+// Эффект - функция от d, времени и скорости колеса; phase набегает со скоростью, поэтому смена скорости не рвёт рисунок.
+static float ringD[MAX_LEDS];     // -1: точка не на кольце
+static float fxPhase = 0;
+static uint32_t fxLast = 0;
+
+static void ringLayout() {
+  static const uint8_t RING[] = {R_FRONT_R, R_SIDE_R, R_BACK, R_SIDE_L, R_FRONT_L};
+  int tot = 0;
+  for (int s = 0; s < cfg.nseg; s++)
+    for (uint8_t r : RING) if (cfg.seg[s].role == r) tot += cfg.seg[s].count;
+  for (int i = 0; i < cfg.num_leds; i++) ringD[i] = -1;
+  if (!tot) return;
+  const float gap = 14.0f, span = 360.0f - gap;
+  int k = 0;
+  for (uint8_t r : RING)
+    for (int s = 0; s < cfg.nseg; s++) {
+      if (cfg.seg[s].role != r) continue;
+      uint16_t a = segStart(s), n = cfg.seg[s].count;
+      for (int j = 0; j < n; j++) {
+        int q = (cfg.seg[s].flags & SEG_REV) ? n - 1 - j : j;
+        float u = (gap / 2 + span * (k + q + 0.5f) / tot) / 360.0f;
+        ringD[a + j] = u <= 0.5f ? u * 2 : (1 - u) * 2;
+      }
+      k += n;
+    }
+  // стоп-полоса - на затылке
+  for (int s = 0; s < cfg.nseg; s++)
+    if (cfg.seg[s].role == R_STOP) for (int j = 0; j < cfg.seg[s].count; j++) ringD[segStart(s) + j] = 0.95f;
+}
+
+static inline float frac(float x) { return x - floorf(x); }
+static inline float hash1(uint32_t n) {  // 0..1, детерминированно
+  n = (n << 13) ^ n;
+  n = n * (n * n * 15731u + 789221u) + 1376312589u;
+  return (n & 0x7fffffff) / 2147483648.0f;
+}
+struct Rgb { float r, g, b; };
+static inline Rgb mixc(Rgb a, Rgb b, float k) { return {a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k}; }
+static inline Rgb mulc(Rgb a, float k) { return {a.r * k, a.g * k, a.b * k}; }
+static Rgb hsv(float h, float s, float v) {
+  h = frac(h) * 6; int i = (int)h; float f = h - i, p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f));
+  switch (i % 6) { case 0: return {v, t, p}; case 1: return {q, v, p}; case 2: return {p, v, t};
+                   case 3: return {p, q, v}; case 4: return {t, p, v}; default: return {v, p, q}; }
+}
+
+// Цвет точки i эффекта: 0..1 по каналам
+static Rgb fxColor(int i, float d, float t, float v, float acc) {
+  Rgb c1 = {cfg.fx_rgb1[0] / 255.0f, cfg.fx_rgb1[1] / 255.0f, cfg.fx_rgb1[2] / 255.0f};
+  Rgb c2 = {cfg.fx_rgb2[0] / 255.0f, cfg.fx_rgb2[1] / 255.0f, cfg.fx_rgb2[2] / 255.0f};
+  float ph = fxPhase;
+  switch (cfg.fx) {
+    case FX_BREATH:
+      if (v < 3) return mulc(c1, 0.25f + 0.75f * (0.5f - 0.5f * cosf(t * 2 * PI / 4)));
+      // на ходу - кометы
+    case FX_COMET: case FX_BATTERY: {
+      if (cfg.fx == FX_BATTERY && v < 3) {  // стоянка: заряд колеса зелёной шкалой ото лба
+        float lvl = battery / 100.0f;
+        return d < lvl ? mixc({0, 1, 0.1f}, {1, 0.6f, 0}, d / max(lvl, 0.01f) * 0.3f) : Rgb{0.04f, 0, 0};
+      }
+      float best = 0, bx = 0;
+      for (int k = 0; k < 3; k++) {
+        float x = frac(ph + k / 3.0f) - d; if (x < 0) x += 1;
+        float b = expf(-x * 9); if (b > best) { best = b; bx = x; }
+      }
+      Rgb c = cfg.fx == FX_BATTERY ? c1 : mixc(c2, c1, expf(-bx * 6));
+      return mulc(c, max(0.04f, best));
+    }
+    case FX_FLOW: return mixc(c1, c2, 0.5f + 0.5f * sinf(2 * PI * (d * 2 - ph * 2)));
+    case FX_GAUGE: {
+      float f = v / 60.0f;
+      if (d > f) return mulc(c1, 0.05f);
+      Rgb c = mixc(c1, c2, d);
+      return fabsf(d - f) < 0.04f ? Rgb{min(1.0f, c.r * 1.6f), min(1.0f, c.g * 1.6f), min(1.0f, c.b * 1.6f)} : c;
+    }
+    case FX_SPARKLE: {
+      float rate = 1 + v / 4, x = t * rate + hash1(i) * 7;
+      uint32_t slot = (uint32_t)x; float age = frac(x);
+      bool on = hash1(i * 7919 + slot) < 0.12f + v / 250;
+      return on ? mulc(mixc(c2, c1, age), 1 - age * 0.7f) : mulc(c1, 0.12f);
+    }
+    case FX_RAINBOW: return hsv(d * 1.2f - ph, 1, 0.9f);
+    case FX_SCANNER: {
+      float p = 0.5f - 0.5f * cosf(ph * PI * 1.2f), x = fabsf(d - p);
+      return mulc(mixc(c2, c1, min(1.0f, x * 6)), max(0.04f, expf(-x * 14)));
+    }
+    case FX_ROAD: return frac(d * 5 - ph * 2.5f) < 0.45f ? c1 : mulc(c1, 0.06f);
+    case FX_FIRE: {
+      float back = 1 - d;
+      float fl = hash1(i * 31 + (uint32_t)(t * 14)) * 0.5f + hash1(i * 57 + (uint32_t)(t * 9) + 99991) * 0.5f;
+      float reach = 0.25f + min(0.75f, v / 50), k = max(0.0f, 1 - back / reach), h = k * (0.55f + 0.45f * fl);
+      return mulc(mixc({0.05f, 0, 0}, mixc(c1, c2, 1 - h), min(1.0f, h * 1.4f)), min(1.0f, 0.15f + h * 1.2f));
+    }
+    case FX_METEOR: {
+      float b = 0;
+      for (int m = 0; m < 5; m++) {
+        float sp = 0.6f + hash1(m * 9 + 1) * 0.9f, len = 0.08f + hash1(m * 3 + 2) * 0.2f;
+        float x = frac(ph * sp + hash1(m * 5 + 3)) - d;
+        if (x >= 0 && x < len) b = max(b, 1 - x / len);
+      }
+      return mulc(mixc(c1, c2, b), max(0.03f, b));
+    }
+    case FX_AURORA: {
+      float w = 0.5f + 0.5f * sinf(2 * PI * (d * 1.3f + t * 0.07f + ph * 0.2f)) * sinf(2 * PI * (d * 0.7f - t * 0.05f));
+      return mulc(mixc(c1, c2, w), 0.45f + 0.55f * w);
+    }
+    case FX_ACCEL: {
+      float a = constrain(acc / 8, 0.0f, 1.0f);
+      return d < a ? mulc(c2, 0.6f + 0.4f * a) : mulc(c1, 0.35f);
+    }
+    case FX_SOLID: default: return c1;
+  }
+}
+
+// Точка кольца в эффекте: перед белый и затылок красный поверх, если включено
+static void fxPixel(int i, uint32_t now, float v, float acc) {
+  float d = ringD[i];
+  uint8_t tb = cfg.bright_tail;
+  if ((cfg.fx_flags & FXF_FRONT_WHITE) && d < 0.1f) { pxs(i, 255, 255, 255, max<uint8_t>(tb, 60)); return; }
+  if ((cfg.fx_flags & FXF_BACK_RED) && d > 0.86f) { pxs(i, 255, 0, 0, max<uint8_t>(tb, 60)); return; }
+  Rgb c = fxColor(i, d, now / 1000.0f, v, acc);
+  pxs(i, (uint8_t)(constrain(c.r, 0.0f, 1.0f) * 255), (uint8_t)(constrain(c.g, 0.0f, 1.0f) * 255),
+      (uint8_t)(constrain(c.b, 0.0f, 1.0f) * 255), cfg.fx_bright);
+}
+
 // Расчётный ток: 20 мА на канал на полной яркости плюс 1 мА покоя на точку; выше предела - притушить
 static void output() {
   uint32_t sum = 0;
@@ -491,11 +630,26 @@ static void draw(uint32_t now) {
     bool brake = m == M_BRAKE, accel = m == M_ACCEL, park = m == M_PARK;
     bool warnOn = m == M_WARN && (now / 125) & 1;
     uint32_t since = now - modeSince;
+    // эффект шлема: в обычной езде, на стоянке, при разгоне и без связи; стоп и предупреждение - как всегда
+    bool fxOn = cfg.kind == 0 && cfg.fx != FX_CLASSIC && !brake && m != M_WARN;
+    float fv = 0, facc = 0;
+    if (fxOn) {
+      ringLayout();
+      if (m != M_NOSIGNAL) { fv = abs(speed) / 10.0f; facc = accelF / 10.0f; }
+      float dt = fxLast ? (now - fxLast) / 1000.0f : 0.02f;
+      if (dt > 0.2f) dt = 0.02f;
+      fxLast = now;
+      fxPhase += dt * (0.12f + fv / 25) * cfg.fx_speed / 100.0f;
+      if (fxPhase > 1000) fxPhase -= 1000;
+    }
     for (int s = 0; s < cfg.nseg; s++) {
       uint8_t ro = cfg.seg[s].role;
       uint16_t a = segStart(s), cnt = cfg.seg[s].count;
+      const uint8_t *sc = cfg.seg_rgb[s];
+      bool own = sc[0] | sc[1] | sc[2];  // свой цвет габарита сегмента
       for (int j = 0; j < cnt; j++) {
         int i = a + j;
+        if (fxOn && ringD[i] >= 0) { fxPixel(i, now, fv, facc); continue; }
         switch (ro) {
           case R_FRONT_R: case R_FRONT_L:
             if (cfg.flags & CFG_FRONT_WHITE) pxs(i, 255, 255, 255, tb); break;
@@ -528,6 +682,9 @@ static void draw(uint32_t now) {
             break;
           default: break;
         }
+        // свой цвет сегмента вместо цвета роли - в габарите; стоп, разгон на затылке и заряд на педалях - свои
+        if (own && ro != R_OFF && !brake && !(accel && (ro == R_BACK || ro == R_STOP)) && !(park && (ro == R_PEDAL_R || ro == R_PEDAL_L)))
+          pxs(i, sc[0], sc[1], sc[2], (ro == R_DRL_R || ro == R_DRL_L) ? max<uint8_t>(tb, 80) : tb);
         // предупреждение колеса: всё, кроме белого спереди, мигает красным и жёлтым
         if (m == M_WARN && ro != R_FRONT_R && ro != R_FRONT_L && ro != R_DRL_R && ro != R_DRL_L && ro != R_OFF)
           pxs(i, 255, warnOn ? 150 : 30, 0, bb);
@@ -708,6 +865,58 @@ static String netStatus() {
   return s;
 }
 
+// Прошивка по Bluetooth (см. protokol.h)
+static volatile bool otaOn = false;
+static volatile uint32_t otaSize = 0, otaGot = 0, otaRestartAt = 0;
+
+static void otaCmd(String a) {
+  a.trim();
+  if (a == "abort") {
+    if (otaOn) { otaOn = false; Update.abort(); snprintf(updState, sizeof updState, "прервано"); }
+    return;
+  }
+  int sp = a.indexOf(' ');
+  uint32_t size = sp > 0 ? a.substring(0, sp).toInt() : 0;
+  String md5 = sp > 0 ? a.substring(sp + 1) : "";
+  md5.trim();
+  if (updBusy || !size || md5.length() != 32) { snprintf(updState, sizeof updState, "ошибка: ota, размер или MD5"); return; }
+  if (otaOn) Update.abort();
+  if (!Update.begin(size)) { snprintf(updState, sizeof updState, "ошибка: %s", Update.errorString()); return; }
+  Update.setMD5(md5.c_str());
+  otaSize = size; otaGot = 0; otaOn = true;
+  if (bleSrv && connected) bleSrv->updateConnParams(connHandle, 6, 12, 0, 400);  // на приём - 7.5-15 мс
+  snprintf(updState, sizeof updState, "приём 0%%");
+  Serial.printf("ota: начало, %u байт\n", (unsigned)size);
+}
+
+class OtaCb : public NimBLECharacteristicCallbacks {
+  void onRead(NimBLECharacteristic *c, NimBLEConnInfo &ci) override { uint32_t g = otaGot; c->setValue((uint8_t *)&g, 4); }
+  void onWrite(NimBLECharacteristic *c, NimBLEConnInfo &ci) override {
+    NimBLEAttValue v = c->getValue();
+    if (!otaOn || v.size() < 5) return;
+    uint32_t off;
+    memcpy(&off, v.data(), 4);
+    if (off != otaGot) return;  // не по порядку - приложение повторит с принятого
+    size_t n = min((size_t)(v.size() - 4), (size_t)(otaSize - otaGot));
+    if (Update.write((uint8_t *)v.data() + 4, n) != n) {
+      otaOn = false;
+      snprintf(updState, sizeof updState, "ошибка: запись, %s", Update.errorString());
+      Update.abort();
+      return;
+    }
+    uint32_t was = otaGot * 100 / otaSize;
+    otaGot += n;
+    uint32_t pc = otaGot * 100 / otaSize;
+    if (pc != was) snprintf(updState, sizeof updState, "приём %u%%", (unsigned)pc);
+    if (otaGot == otaSize) {
+      otaOn = false;
+      if (Update.end()) { snprintf(updState, sizeof updState, "готово, перезапуск"); otaRestartAt = millis() + 1500; }
+      else snprintf(updState, sizeof updState, "ошибка: %s", Update.errorString());
+      Serial.printf("ota: %s\n", updState);
+    }
+  }
+};
+
 static void netCmd(const String &c) {
   Serial.printf("сеть: команда %s\n", c.startsWith("wifi=") ? "wifi=..." : c.c_str());
   if (c.startsWith("name=")) {
@@ -724,7 +933,8 @@ static void netCmd(const String &c) {
     if (wifiOn) { setWifi(false); setWifi(true); }
   } else if (c == "wifi on") setWifi(true);
   else if (c == "wifi off") { if (!updBusy) setWifi(false); }
-  else if (c == "upd") { if (!updBusy) { updWant = true; setWifi(true); } }
+  else if (c == "upd") { if (!updBusy && !otaOn) { updWant = true; setWifi(true); } }
+  else if (c.startsWith("ota ")) otaCmd(c.substring(4));
   else if (c == "reboot") { delay(200); ESP.restart(); }
 }
 
@@ -874,6 +1084,11 @@ static void serialCmd() {
   }
 }
 
+// Откат: новая прошивка после обновления считается рабочей только через 20 с нормальной работы.
+// Упала или зависла раньше (сторож цикла 5 с) - загрузчик сам вернёт прежнюю.
+extern "C" bool verifyRollbackLater() { return true; }
+static bool appValid = false;
+
 void setup() {
   Serial.begin(115200);
   cfgLoad();
@@ -908,6 +1123,7 @@ void setup() {
   NimBLEDevice::init(name);
   NimBLEDevice::setMTU(247);
   NimBLEServer *srv = NimBLEDevice::createServer();
+  bleSrv = srv;
   srv->setCallbacks(new SrvCb());
   srv->advertiseOnDisconnect(true);
   NimBLEService *svc = srv->createService(UUID_SERVICE);
@@ -920,6 +1136,7 @@ void setup() {
   chrFrame = svc->createCharacteristic(UUID_FRAME, NIMBLE_PROPERTY::NOTIFY);
   chrFrame->setCallbacks(new FrameCb());
   svc->createCharacteristic(UUID_NET, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE)->setCallbacks(new NetCb());
+  svc->createCharacteristic(UUID_OTA, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR)->setCallbacks(new OtaCb());
   svc->start();
   // в рекламе сервис (16 + 2 байта), имя - в ответе на скан: иначе длинное имя не влезает в 31 байт
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -934,11 +1151,18 @@ void setup() {
   Serial.printf("%s: лента GPIO%d, %u точек, %u сегментов; BLE %s; ESP-NOW канал %d, MAC %s\n",
                 name, PIN_LENTA, cfg.num_leds, cfg.nseg, NimBLEDevice::getAddress().toString().c_str(),
                 ESPNOW_CH, WiFi.macAddress().c_str());
+  enableLoopWDT();
 }
 
 void loop() {
   static uint32_t lastDraw = 0;
   uint32_t now = millis();
+  if (!appValid && now > 20000) {
+    appValid = true;
+    esp_ota_mark_app_valid_cancel_rollback();
+    Serial.println("прошивка: работает 20 с, откат отменён");
+  }
+  if (otaRestartAt && (int32_t)(now - otaRestartAt) > 0) ESP.restart();
   serialCmd();
   wifiTick(now);
   relayTick(now);

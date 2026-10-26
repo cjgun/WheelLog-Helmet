@@ -12,6 +12,7 @@
 #define UUID_CMD           "4f1d2a6e-8c3b-4e57-9a10-6b2d7c9e0f31"  // write: проверка, подсветка сегмента
 #define UUID_FRAME         "9b7e3c21-5d4a-4f68-b2e1-0c8a6f4d2e95"  // notify: кадр ленты кусками
 #define UUID_NET           "6d3e1f40-2b7a-4c55-9e10-3a8f5c2d7b61"  // read/write: имя, Wi-Fi, обновление (текст)
+#define UUID_OTA           "8a1f3c52-6e4b-4d7a-b9c3-2f5e7d1a0c64"  // write/read: прошивка по Bluetooth кусками
 
 // Сеть и обновление (characteristic net), текст UTF-8.
 // Запись, одна команда за раз:
@@ -19,9 +20,15 @@
 //   wifi=<сеть>\t<пароль>  запомнить сеть (пароль не читается обратно)
 //   wifi on | wifi off    включить или выключить Wi-Fi (после перезапуска выключен)
 //   upd                   включить Wi-Fi, скачать прошивку с cjgun.ru, проверить MD5, перезапуститься
+//   ota <размер> <md5>    начать прошивку по Bluetooth: дальше куски в characteristic ota
+//   ota abort             прервать
 //   reboot                перезапуск
 // Чтение - строки key=value: name, ssid, wifi (off / подключение / адрес), upd (состояние), ver, board.
 #define NAME_MAX 20
+
+// Прошивка по Bluetooth: запись в ota - [смещение u32][данные]; кусок принимается, только если смещение
+// равно уже принятому (иначе пропускается - приложение повторит с принятого). Чтение ota - [принято u32].
+// Когда принято всё, плата проверяет MD5 и перезапускается; ход и итог - в upd= characteristic net.
 
 // Пакет данных v1 от телефона, 8 байт
 struct __attribute__((packed)) DataV1 {
@@ -65,8 +72,19 @@ struct __attribute__((packed)) Seg {
   uint8_t flags;      // SEG_REV
 };
 
+// Эффекты ленты шлема (Config.fx). Идут по кольцу ото лба к затылку по обеим сторонам,
+// скорость бега - от скорости колеса. Стоп, повороты и предупреждения - поверх эффекта.
+enum Fx : uint8_t {
+  FX_CLASSIC = 0,   // габарит по ролям (свои цвета сегментов - seg_rgb)
+  FX_COMET, FX_FLOW, FX_GAUGE, FX_SPARKLE, FX_RAINBOW, FX_BREATH, FX_SCANNER, FX_ROAD,
+  FX_FIRE, FX_METEOR, FX_AURORA, FX_ACCEL, FX_BATTERY, FX_SOLID,
+  FX_COUNT
+};
+#define FXF_FRONT_WHITE 0x01   // перед (10% кольца у лба) белый поверх эффекта
+#define FXF_BACK_RED    0x02   // затылок (14% кольца) красный поверх эффекта
+
 // Настройки, хранятся в NVS. Запись в characteristic config - вся структура целиком.
-#define CONFIG_VER 4
+#define CONFIG_VER 5
 struct __attribute__((packed)) Config {
   uint8_t ver;            // = CONFIG_VER
   uint8_t bright_tail;    // габарит, 0-255
@@ -96,11 +114,19 @@ struct __attribute__((packed)) Config {
   uint8_t warn_pwm;       // предупреждение от PWM, %, 0 - выкл
   uint8_t rim;            // обод (колесо): RIM_*
   uint8_t relay;          // ESP-NOW: RELAY_*
+  // v5: эффекты и свои цвета
+  uint8_t fx;             // Fx
+  uint8_t fx_rgb1[3];     // цвет 1 эффекта
+  uint8_t fx_rgb2[3];     // цвет 2 эффекта
+  uint8_t fx_flags;       // FXF_*
+  uint8_t fx_speed;       // множитель скорости бега, %, 25-250
+  uint8_t fx_bright;      // яркость эффекта, 0-255
+  uint8_t seg_rgb[MAX_SEG][3];  // свой цвет габарита сегмента; 0,0,0 - цвет роли
 };
 
-static_assert(sizeof(Config) == 74, "Config");
+static_assert(sizeof(Config) == 108, "Config");
 // Размер config прошлых версий: новые поля только дописываются в конец
-static const uint8_t CONFIG_SIZE[] = {0, 30, 33, 34, 74};
+static const uint8_t CONFIG_SIZE[] = {0, 30, 33, 34, 74, 108};
 
 #define CFG_CURRENT_INVERT 0x01
 #define CFG_FRONT_WHITE    0x02

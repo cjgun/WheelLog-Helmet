@@ -25,12 +25,42 @@ object Role {
 
 data class Seg(val count: Int, val role: Int, val rev: Boolean = false)
 
+/** Эффекты ленты шлема, как enum Fx в fw/src/protokol.h; порядок не менять. */
+object Fx {
+    const val CLASSIC = 0; const val COMET = 1; const val FLOW = 2; const val GAUGE = 3; const val SPARKLE = 4
+    const val RAINBOW = 5; const val BREATH = 6; const val SCANNER = 7; const val ROAD = 8; const val FIRE = 9
+    const val METEOR = 10; const val AURORA = 11; const val ACCEL = 12; const val BATTERY = 13; const val SOLID = 14
+    val names = listOf("Обычный", "Кометы", "Поток", "Шкала", "Искры", "Радуга", "Дыхание", "Сканер", "Разметка",
+        "Огонь", "Метеоры", "Сияние", "Ускорение", "Заряд", "Свой цвет")
+    val hints = listOf(
+        "Габарит по ролям: перед белый, бока и затылок красные. Свой цвет сегмента - нажми квадратик в «Сегментах».",
+        "Три огонька с хвостом бегут ото лба к затылку по обеим сторонам. Быстрее едешь - быстрее бегут.",
+        "Два цвета перетекают волнами назад. Скорость волн - от скорости колеса.",
+        "Лента заполняется ото лба назад по скорости: 0 км/ч - пусто, 60 - до затылка.",
+        "Тлеющий фон цвета 1 и вспышки цвета 2. Чем быстрее, тем чаще.",
+        "Радуга течёт назад, скорость течения - от скорости.",
+        "Стоишь - лента медленно дышит цветом 1. Тронулся - кометы.",
+        "Точка с хвостом ходит ото лба к затылку и обратно.",
+        "Штрихи бегут назад, как дорожная разметка мимо тебя.",
+        "На стоянке тлеет, на скорости разгорается и вытягивается вперёд.",
+        "Случайные огоньки разной длины пролетают назад.",
+        "Медленные переливы двух цветов, на скорости живее.",
+        "Газ - цвет 2 растекается ото лба, накат - спокойный цвет 1.",
+        "На стоянке - заряд колеса зелёной шкалой, на ходу - кометы.",
+        "Вся лента одним цветом 1.")
+    /** Цвета, которые эффект ставит при выборе (можно поменять). */
+    val defaults = mapOf(FIRE to (intArrayOf(255, 42, 0) to intArrayOf(255, 196, 0)), AURORA to (intArrayOf(0, 255, 156) to intArrayOf(122, 0, 255)),
+        ROAD to (intArrayOf(255, 255, 255) to intArrayOf(255, 255, 255)))
+    const val F_FRONT_WHITE = 0x01; const val F_BACK_RED = 0x02
+}
+
 /**
- * Настройки платы v4, 74 байта little-endian (struct Config в fw/src/protokol.h).
+ * Настройки платы, little-endian (struct Config в fw/src/protokol.h): v5 - 108 байт, v4 (старая прошивка) - 74.
+ * Внутри всегда 108 байт; у платы v4 поля v5 не используются и на плату не уходят (forBoard).
  * Каждая правка - новая копия, чтобы Compose видел изменение.
  */
 class Cfg(src: ByteArray = DEFAULT) {
-    val b: ByteArray = src.copyOf(SIZE)
+    val b: ByteArray = src.copyOf(SIZE).also { if (src.size < SIZE) DEFAULT.copyInto(it, src.size, src.size, SIZE) }
     private val bb get() = ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN)
     fun u8(o: Int) = b[o].toInt() and 0xff
     fun u16(o: Int) = bb.getShort(o).toInt() and 0xffff
@@ -38,7 +68,12 @@ class Cfg(src: ByteArray = DEFAULT) {
     private fun set8(o: Int, v: Int) { b[o] = v.coerceIn(0, 255).toByte() }
     private fun set16(o: Int, v: Int) { bb.putShort(o, v.coerceIn(0, 65535).toShort()) }
 
-    val ok get() = u8(0) == VER
+    val ver get() = u8(0)
+    val ok get() = ver == VER || ver == 4
+    /** Есть эффекты и свои цвета (прошивка v5). */
+    val hasFx get() = ver >= 5
+    /** Байты для записи в плату: v4 - первые 74. */
+    fun forBoard(): ByteArray = if (ver == 4) b.copyOf(SIZE_V4) else b.copyOf()
     var brightTail get() = u8(1); set(v) = set8(1, v)
     var brightBrake get() = u8(2); set(v) = set8(2, v)
     fun flag(m: Int) = u8(3) and m != 0
@@ -60,6 +95,16 @@ class Cfg(src: ByteArray = DEFAULT) {
     var warnPwm get() = u8(71); set(v) = set8(71, v)
     var rim get() = u8(72); set(v) = set8(72, v)
     var relay get() = u8(73); set(v) = set8(73, v)
+    // v5
+    var fx get() = u8(74); set(v) = set8(74, v)
+    var fxRgb1: IntArray get() = intArrayOf(u8(75), u8(76), u8(77)); set(v) { for (i in 0..2) set8(75 + i, v[i]) }
+    var fxRgb2: IntArray get() = intArrayOf(u8(78), u8(79), u8(80)); set(v) { for (i in 0..2) set8(78 + i, v[i]) }
+    var fxFlags get() = u8(81); set(v) = set8(81, v)
+    var fxSpeed get() = u8(82); set(v) = set8(82, v.coerceIn(25, 250))
+    var fxBright get() = u8(83); set(v) = set8(83, v)
+    /** Свой цвет габарита сегмента; 0,0,0 - цвет роли. */
+    fun segRgb(i: Int) = intArrayOf(u8(84 + i * 3), u8(85 + i * 3), u8(86 + i * 3))
+    fun setSegRgb(i: Int, v: IntArray) { for (k in 0..2) set8(84 + i * 3 + k, v[k]) }
 
     var segs: List<Seg>
         get() = (0 until u8(35).coerceIn(0, MAX_SEG)).map { i ->
@@ -88,8 +133,11 @@ class Cfg(src: ByteArray = DEFAULT) {
     }
 
     companion object {
-        const val VER = 4
-        const val SIZE = 74
+        const val VER = 5
+        const val SIZE = 108
+        const val SIZE_V4 = 74
+        /** То, что прочитано с платы, - настройки (v4 или v5). */
+        fun isBoardCfg(v: ByteArray?) = v != null && ((v.size == SIZE && v[0].toInt() == VER) || (v.size == SIZE_V4 && v[0].toInt() == 4))
         const val MAX_SEG = 8
         const val F_CURRENT_INVERT = 0x01; const val F_FRONT_WHITE = 0x02; const val F_CALIBRATE = 0x04; const val F_TAIL_BRAKE = 0x08
         const val RIM_FLASH_WARN = 0x01; const val RIM_FLASH_BRAKE = 0x02; const val RIM_OFF_PARK = 0x04
@@ -110,6 +158,8 @@ class Cfg(src: ByteArray = DEFAULT) {
             a[24] = 0; a[25] = 200.toByte(); a[26] = 160.toByte(); a[27] = 15
             c.putShort(28, 2000); c.putShort(30, 250); a[32] = 8; a[33] = 0
             a[68] = 255.toByte(); a[69] = 90; a[70] = 0; a[71] = 85; a[72] = RIM_FLASH_WARN.toByte(); a[73] = RELAY_SEND.toByte()
+            a[74] = Fx.CLASSIC.toByte(); a[75] = 0; a[76] = 200.toByte(); a[77] = 255.toByte(); a[78] = 122; a[79] = 0; a[80] = 255.toByte()
+            a[81] = (Fx.F_FRONT_WHITE or Fx.F_BACK_RED).toByte(); a[82] = 100; a[83] = 160.toByte()
         }.let { Cfg(it).apply { segs = TEMPLATE_FF }.b }
 
         fun forKind(kind: DevKind): Cfg = Cfg().copy {
