@@ -55,9 +55,9 @@ private val TESTS = listOf(1 to "Габарит", 2 to "Стоп", 3 to "Раз�
 
 /** Раздел «Подсветка»: шлемы и колесо. На разложенном Fold справа сразу открыто выбранное устройство. */
 @Composable
-fun lightingScreen(onOpen: (String) -> Unit) {
+fun lightingScreen(onOpen: (String) -> Unit, forceNarrow: Boolean = false) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        if (maxWidth >= 600.dp) {
+        if (maxWidth >= 600.dp && !forceNarrow) {
             if (Lighting.selected.value.isEmpty()) Lighting.selected.value = Lighting.devices.firstOrNull()?.id ?: ""
             Row(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(8.dp)) {
@@ -77,8 +77,22 @@ fun lightingScreen(onOpen: (String) -> Unit) {
 
 /** Экран одного устройства (сложенный телефон). */
 @Composable
-fun lightDeviceScreen() {
+fun lightDeviceScreen(full: Boolean = false) {
     val id = Lighting.selected.value
+    val d = Lighting.device(id)
+    // Fold, раздел устройства: на весь экран - слева сразу все виды, справа настройки раздела
+    if (full && d != null && devSection.value.isNotEmpty()) {
+        Row(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
+                picture(d, Lighting.esp[id], Lighting.zg[id], quad = true)
+            }
+            Box(Modifier.width(1.dp).fillMaxHeight().background(HAIR))
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
+                devicePart(id, wide = true, showPicture = false)
+            }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
         if (Lighting.device(id) != null) devicePart(id, wide = false) else Text("Устройство удалено", Modifier.padding(16.dp))
     }
@@ -164,7 +178,7 @@ private fun testCard() {
 // ======================= одно устройство =======================
 
 @Composable
-private fun devicePart(id: String, wide: Boolean) {
+private fun devicePart(id: String, wide: Boolean, showPicture: Boolean = true) {
     val d = Lighting.device(id) ?: return
     val link = Lighting.esp[id]
     val zl = Lighting.zg[id]
@@ -189,7 +203,7 @@ private fun devicePart(id: String, wide: Boolean) {
             Box(Modifier.size(7.dp).background(if (on) Color(0xFF4FD18B) else Color(0xFF3A3F46), CircleShape))
             Text(if (on) "  НА СВЯЗИ" else "  НЕТ СВЯЗИ", fontSize = 10.5.sp, letterSpacing = 1.4.sp, color = MUTE, fontWeight = FontWeight.SemiBold)
         }
-        picture(d, link, zl, small = sec.isNotEmpty(), quad = wide)
+        if (showPicture) picture(d, link, zl, small = sec.isNotEmpty())
         val m = link?.mode?.intValue ?: if (zl != null) Lighting.mode.intValue else -1
         if (sec.isEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
@@ -875,7 +889,7 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?, small: Bool
             listOf(Role.TAIL_L, Role.TAIL_R) to (floatArrayOf(339.0f,339.0f,339.0f,339.0f,339.0f,339.0f,339.0f,339.0f,339.0f) to floatArrayOf(48.0f,62.6f,77.2f,91.9f,106.5f,121.1f,135.8f,150.4f,165.0f)),
             listOf(Role.PEDAL_L, Role.PEDAL_R) to (floatArrayOf(130.0f,131.8f,133.7f,140.2f,149.7f,166.1f,182.7f,199.4f,216.1f,232.9f,249.6f,266.3f,283.0f,299.4f,312.6f,318.2f,319.1f,320.0f) to floatArrayOf(276.0f,259.4f,242.8f,227.5f,215.2f,211.8f,210.8f,210.5f,210.2f,210.0f,209.7f,209.4f,209.1f,211.4f,219.2f,234.6f,251.3f,268.0f)))
         Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxWidth(if (small) 0.62f else 1f).heightIn(max = if (small) 220.dp else 360.dp).aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
+        Canvas(Modifier.heightIn(max = if (small) 220.dp else 340.dp).aspectRatio(1f, matchHeightConstraintsFirst = true).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
             drawImage(img, IntOffset.Zero, IntSize(img.width, img.height), IntOffset.Zero, IntSize(size.width.toInt(), size.height.toInt()))
             drawRect(Color.Black.copy(alpha = 0.12f))
             val k = size.width / 420f
@@ -897,7 +911,7 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?, small: Bool
     fun one(vi: Int, mod: Modifier) {
         val v = views[vi]
         val img = ImageBitmap.imageResource(v.res)
-        Canvas(mod.aspectRatio(v.w.toFloat() / v.h).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
+        Canvas(mod.aspectRatio(v.w.toFloat() / v.h, matchHeightConstraintsFirst = true).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
             val k = size.width / v.w
             drawImage(img, IntOffset.Zero, IntSize(img.width, img.height), IntOffset.Zero, IntSize(size.width.toInt(), size.height.toInt()))
             drawRect(Color.Black.copy(alpha = 0.35f))
@@ -911,7 +925,7 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?, small: Bool
     if (!quad) {
         var vi by heroView
         Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            one(vi, Modifier.fillMaxWidth(if (small) 0.62f else 1f).heightIn(max = if (small) 200.dp else 320.dp))
+            one(vi, Modifier.heightIn(max = if (small) 200.dp else 300.dp))
             Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 HelmetViews.titles.forEachIndexed { i, s ->
                     val on = i == vi

@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -52,24 +55,42 @@ fun CjSubHeader(title: String, onBack: () -> Unit) {
 /** Вкладки кроме «Езды»: «Езда» пока остаётся прежним экраном WheelLog (часть 2 дизайна). */
 @Composable
 fun CjTabContent(tab: CjTab) {
-    Box(Modifier.fillMaxSize()) {
-        when (tab) {
-            CjTab.LIGHT -> LightTab()
-            CjTab.TRIPS -> TripsTab()
-            CjTab.WHEEL -> WheelTab()
-            CjTab.RIDE -> {}
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth >= 600.dp
+        val leftW = maxWidth * 0.42f
+        val content: @Composable () -> Unit = {
+            when (tab) {
+                CjTab.LIGHT -> LightTab(wide)
+                CjTab.TRIPS -> TripsTab()
+                CjTab.WHEEL -> WheelTab()
+                CjTab.RIDE -> {}
+            }
+        }
+        // Fold: вкладки первого уровня - слева прибор, справа раздел; разделы устройства - на весь экран
+        // одна и та же структура при любом раскладе: иначе NavHost пересоздаётся и раздел сбрасывается к списку
+        Row(Modifier.fillMaxSize()) {
+            if (wide && !fullScreen.value) {
+                Box(Modifier.width(leftW)) { RideScreen() }
+                Box(Modifier.width(1.dp).fillMaxHeight().background(Cj.hair))
+            }
+            Box(Modifier.weight(1f)) { content() }
         }
     }
 }
 
+/** Раздел устройства открыт на Fold - на весь экран, без прибора. */
+val fullScreen = androidx.compose.runtime.derivedStateOf { CjState.tab.value == CjTab.LIGHT && lightDev.value && com.cooper.wheellog.settings.devSection.value.isNotEmpty() }
+private val lightDev = androidx.compose.runtime.mutableStateOf(false)
+
 @Composable
-private fun LightTab() {
+private fun LightTab(wide: Boolean = false) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     BackHandler(enabled = entry?.destination?.route == "dev") { nav.popBackStack() }
+    lightDev.value = entry?.destination?.route == "dev"
     NavHost(nav, startDestination = "list") {
-        composable("list") { lightingScreen(onOpen = { nav.navigate("dev") }) }
-        composable("dev") { Column { if (com.cooper.wheellog.settings.devSection.value.isEmpty()) CjSubHeader("Свет") { nav.popBackStack() }; lightDeviceScreen() } }
+        composable("list") { lightingScreen(onOpen = { nav.navigate("dev") }, forceNarrow = true) }
+        composable("dev") { Column { if (com.cooper.wheellog.settings.devSection.value.isEmpty()) CjSubHeader("Свет") { nav.popBackStack() }; lightDeviceScreen(full = wide) } }
     }
 }
 
