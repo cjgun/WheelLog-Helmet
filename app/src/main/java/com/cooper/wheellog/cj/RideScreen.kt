@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -197,14 +198,15 @@ private fun Dial(v: Double, maxV: Int, redV: Int, col: Color, unit: String, odo:
                 drawCircle(Color.White, 2.5f * dd, e)
             }
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = w * 0.09f)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = w * 0.02f)) {
             val fs = with(LocalDensity.current) { (w * 0.365f).toSp() }
             Text("${v.roundToInt()}", fontSize = fs, fontWeight = FontWeight(200), letterSpacing = (-2).sp, lineHeight = fs, color = Cj.ink)
             Text(unit, fontSize = 11.sp, letterSpacing = 3.sp, color = Cj.mute, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.border(1.dp, Cj.hair, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.Bottom) {
-                Text(odo, fontSize = 16.sp, fontWeight = FontWeight.SemiBold); Text(" км", fontSize = 12.sp, color = Cj.mute)
-            }
+        }
+        // одометр внизу, между «0» и концом шкалы
+        Row(Modifier.align(Alignment.BottomCenter).offset(y = w * 0.02f).border(1.dp, Cj.hair, RoundedCornerShape(10.dp))
+            .padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
+            Text(odo, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.3.sp); Text(" км", fontSize = 13.sp, color = Cj.mute, modifier = Modifier.padding(bottom = 2.dp))
         }
     }
     }
@@ -284,7 +286,7 @@ private fun Tiles(items: List<Pair<Pair<String, String>, String>>) {
                     if (i > 0) Box(Modifier.width(1.dp).fillMaxSize().weight(0.001f).background(Cj.hair))
                     Column(Modifier.weight(1f).padding(start = if (i == 0) 2.dp else 10.dp, top = 6.dp)) {
                         Row(verticalAlignment = Alignment.Bottom) {
-                            Text(vu.first, fontSize = 27.sp, fontWeight = FontWeight(300), letterSpacing = (-0.3).sp)
+                            Text(vu.first, fontSize = if (vu.first.length > 6) 22.sp else 27.sp, fontWeight = FontWeight(300), letterSpacing = (-0.3).sp, maxLines = 1, softWrap = false)
                             if (vu.second.isNotEmpty()) Text(" " + vu.second, fontSize = 11.5.sp, color = Cj.mute, modifier = Modifier.padding(bottom = 3.dp))
                         }
                         Text(label.uppercase(), fontSize = 10.5.sp, letterSpacing = 1.4.sp, color = Cj.mute, fontWeight = FontWeight.SemiBold)
