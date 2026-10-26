@@ -55,6 +55,7 @@ import com.cooper.wheellog.data.TripParser
 import com.cooper.wheellog.utils.FileUtil
 import com.cooper.wheellog.views.TripModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -102,7 +103,7 @@ fun TripsList(onRecord: () -> Unit) {
             Row(Modifier.fillMaxWidth().clickable { openTrip.value = t }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(tripTitle(t.title), fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
-                    Text(t.description, fontSize = 12.sp, color = Cj.mute)
+                    Text(t.description + if (t.title in uploaded(ctx)) "  ·  на cjgun.ru" else "", fontSize = 12.sp, color = Cj.mute)
                 }
                 Text("›", fontSize = 20.sp, color = Cj.dim)
             }
@@ -136,6 +137,7 @@ fun TripView(t: TripModel, onBack: () -> Unit) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("‹", fontSize = 26.sp, color = Cj.mute, modifier = Modifier.clickable { onBack() }.padding(horizontal = 12.dp))
                 Text(tripTitle(t.title), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                UploadButton(t)
             }
             val d = data
             if (d == null) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Cj.acc) }; return@Column }
@@ -287,5 +289,74 @@ private fun Lanes(ticks: List<LogTick>, cur: Int, laneH: androidx.compose.ui.uni
                 drawContext.canvas.nativeCanvas.drawText(ticks[(n - 1) * k / 4].timeString.take(5), L + W * k / 4, 12.dp.toPx(), paint)
             }
         }
+    }
+}
+
+// --- выгрузка на cjgun.ru ---
+
+private const val UPLOAD_URL = "https://cjgun.ru/poezdki/priem.php"
+
+private fun cjPrefs(ctx: android.content.Context) = ctx.getSharedPreferences("cj", android.content.Context.MODE_PRIVATE)
+
+/** Имена журналов, уже выгруженных на сайт. */
+private fun uploaded(ctx: android.content.Context): Set<String> = cjPrefs(ctx).getStringSet("uploaded", emptySet()) ?: emptySet()
+
+/** Журнал сжимается gzip и уходит телом POST, ключ - в заголовке X-Key. Ответ: (успех, текст). */
+private fun uploadTrip(ctx: android.content.Context, t: TripModel, key: String): Pair<Boolean, String> = try {
+    val buf = java.io.ByteArrayOutputStream()
+    ctx.contentResolver.openInputStream(t.uri).use { inp ->
+        if (inp == null) return false to "Журнал не открывается"
+        java.util.zip.GZIPOutputStream(buf).use { inp.copyTo(it) }
+    }
+    val c = java.net.URL(UPLOAD_URL + "?name=" + java.net.URLEncoder.encode(t.fileName, "UTF-8")).openConnection() as java.net.HttpURLConnection
+    c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 15000; c.readTimeout = 60000
+    c.setRequestProperty("X-Key", key); c.setRequestProperty("Content-Type", "application/gzip")
+    c.setFixedLengthStreamingMode(buf.size())
+    c.outputStream.use { it.write(buf.toByteArray()) }
+    val code = c.responseCode
+    val body = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.readText() ?: ""
+    val js = runCatching { org.json.JSONObject(body) }.getOrNull()
+    if (code == 200 && js?.optBoolean("ok") == true) true to (if (js.optBoolean("dup")) "Уже на сайте" else "Выгружено")
+    else false to (js?.optString("error")?.ifEmpty { null } ?: "Ошибка $code")
+} catch (e: Exception) { false to "Нет связи с cjgun.ru" }
+
+@Composable
+private fun UploadButton(t: TripModel) {
+    val ctx = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var askKey by remember { mutableStateOf(false) }
+    var state by remember(t) { mutableStateOf(if (t.title in uploaded(ctx)) "НА САЙТЕ ✓" else "НА CJGUN.RU ›") }
+    var busy by remember { mutableStateOf(false) }
+    fun send(key: String) {
+        busy = true; state = "ВЫГРУЖАЮ…"
+        scope.launch {
+            val (ok, msg) = withContext(Dispatchers.IO) { uploadTrip(ctx, t, key) }
+            busy = false
+            if (ok) {
+                cjPrefs(ctx).edit().putStringSet("uploaded", uploaded(ctx) + t.title).apply(); state = "НА САЙТЕ ✓"
+            } else state = "ПОВТОРИТЬ ›"
+            android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+            if (msg == "Неверный ключ") askKey = true
+        }
+    }
+    Text(state, color = if (state.startsWith("НА САЙТЕ")) Cj.green else Cj.acc, fontSize = 11.sp, letterSpacing = 1.5.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.clickable(enabled = !busy) {
+            val key = cjPrefs(ctx).getString("cjgun_key", "") ?: ""
+            if (key.isEmpty()) askKey = true else send(key)
+        }.padding(12.dp))
+    if (askKey) {
+        var v by remember { mutableStateOf(cjPrefs(ctx).getString("cjgun_key", "") ?: "") }
+        androidx.compose.material3.AlertDialog(onDismissRequest = { askKey = false },
+            title = { Text("Ключ cjgun.ru") },
+            text = { Column {
+                Text("Ключ выдаёт сайт. Хранится только в этом телефоне.", fontSize = 13.sp, color = Cj.mute, modifier = Modifier.padding(bottom = 10.dp))
+                androidx.compose.material3.OutlinedTextField(v, { v = it.trim() }, singleLine = true, label = { Text("Ключ") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
+            } },
+            confirmButton = { androidx.compose.material3.TextButton(enabled = v.isNotEmpty(), onClick = {
+                cjPrefs(ctx).edit().putString("cjgun_key", v).apply(); askKey = false; send(v)
+            }) { Text("Выгрузить", color = Cj.acc) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { askKey = false }) { Text("Отмена", color = Cj.mute) } },
+            containerColor = Color(0xFF15181C))
     }
 }
