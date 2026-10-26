@@ -792,7 +792,7 @@ class MainActivity : AppCompatActivity() {
         CjState.tab.value = tab
         val ride = tab == CjTab.RIDE
         binding.pager.visibility = if (ride) View.VISIBLE else View.GONE
-        binding.indicator.visibility = if (ride) View.VISIBLE else View.GONE
+        binding.indicator.visibility = View.GONE  // точки страниц рисует RideScreen
         binding.cjTabs.visibility = if (ride) View.GONE else View.VISIBLE
     }
 

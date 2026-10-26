@@ -77,7 +77,7 @@ fun CjTopBar(
             }
             Column {
                 val name = CjState.wheelName.value.ifEmpty { "Колесо" }
-                Text(name, style = androidx.compose.material3.MaterialTheme.typography.titleMedium, maxLines = 1,
+                Text(name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     color = if (conn) Cj.ink else Cj.mute)
                 Text(
                     if (conn) CjState.wheelModel.value.ifEmpty { "на связи" } else if (search) "поиск..." else "не подключено",

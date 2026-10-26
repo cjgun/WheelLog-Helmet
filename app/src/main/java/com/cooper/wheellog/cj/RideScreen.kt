@@ -93,16 +93,17 @@ fun RideScreen(appConfig: AppConfig = koinInject()) {
     val mph = appConfig.useMph
     val k = if (mph) 0.621371 else 1.0
     val unit = if (mph) "МИЛЬ/Ч" else "КМ/Ч"
-    val maxV = max(30, ((appConfig.maxSpeed + 9) / 10) * 10)
+    val maxV = 120  // шкала до 120 км/ч, зона от 90 - красная (слово владельца 26.10)
+    val redV = 90
     val marks = listOf(appConfig.warningPwm, appConfig.alarmFactor1, appConfig.alarmFactor2).filter { it in 1..99 }.ifEmpty { listOf(70, 80, 90) }
     val hot = r.pwm >= (marks.getOrNull(1) ?: 80)
     val toggle = { mode = if (mode == "dial") "num" else "dial"; prefs.edit().putString("ride_mode", mode).apply() }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(Cj.bg)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Color(0xFF161A20), Color(0xFF0D1014), Color(0xFF07080A)), center = Offset.Unspecified, radius = 1400f))) {
     val wide = maxWidth >= 600.dp
     val leftW = maxWidth * 0.46f
     Row(Modifier.fillMaxSize()) {
-    Column(Modifier.then(if (wide) Modifier.width(leftW) else Modifier.fillMaxWidth()).fillMaxHeight().padding(horizontal = 14.dp)) {
+    Column(Modifier.then(if (wide) Modifier.width(leftW) else Modifier.fillMaxWidth()).fillMaxHeight().padding(horizontal = 10.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
             Row(Modifier.border(1.dp, Cj.hair, RoundedCornerShape(50)).padding(3.dp)) {
                 listOf("dial" to "ПРИБОР", "num" to "ЦИФРА").forEach { (m, t) ->
@@ -115,7 +116,7 @@ fun RideScreen(appConfig: AppConfig = koinInject()) {
         }
         Box(Modifier.fillMaxWidth().weight(1f).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { toggle() },
             contentAlignment = Alignment.Center) {
-            if (mode == "dial") Dial(r.speed * k, maxV, if (hot) Cj.red else Cj.acc, unit, fmt(r.total * k, 1))
+            if (mode == "dial") Dial(r.speed * k, maxV, redV, if (hot || r.speed * k >= redV) Cj.red else Cj.acc, unit, fmt(r.total * k, 1))
             else NumberView(r, k, unit)
         }
         PwmRuler(r.pwm, marks)
@@ -124,7 +125,9 @@ fun RideScreen(appConfig: AppConfig = koinInject()) {
             fmt(r.cur) to "А" to "Ток", fmt(r.power / 1000, 2) to "кВт" to "Мощность", "${r.temp}" to "°C" to "Темп.",
             fmt(r.trip * k) to (if (mph) "ми" else "км") to "Поездка", fmt(r.avg * k) to (if (mph) "ми/ч" else "км/ч") to "Средняя", r.time to "" to "В пути",
         ))
-        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
+            (0 until 4).forEach { i -> Box(Modifier.padding(horizontal = 3.dp).height(5.dp).width(if (i == 0) 18.dp else 5.dp).clip(RoundedCornerShape(3.dp)).background(if (i == 0) Cj.ink else Cj.dim)) }
+        }
     }
     if (wide) {
         Box(Modifier.width(1.dp).fillMaxHeight().background(Cj.hair))
@@ -153,27 +156,33 @@ private fun AllParams(r: Ride, k: Double, mph: Boolean, modifier: Modifier) {
 }
 
 @Composable
-private fun Dial(v: Double, maxV: Int, col: Color, unit: String, odo: String) {
+private fun Dial(v: Double, maxV: Int, redV: Int, col: Color, unit: String, odo: String) {
     val tm = rememberTextMeasurer()
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
     val side = minOf(maxWidth, maxHeight * 1.18f)
     BoxWithConstraints(Modifier.width(side).aspectRatio(1.18f), contentAlignment = Alignment.Center) {
         val w = maxWidth
         Canvas(Modifier.fillMaxSize()) {
-            val cx = size.width / 2; val cy = size.height * 0.56f; val R = size.width * 0.40f; val dd = density
+            val cx = size.width / 2; val cy = size.height * 0.57f; val R = size.width * 0.435f; val dd = density
             val a0 = 0.72 * Math.PI; val a1 = 2.28 * Math.PI
             fun ang(x: Double) = a0 + (a1 - a0) * x / maxV
-            for (kk in 0..maxV) {
-                val a = ang(kk.toDouble()); val maj = kk % 10 == 0; val mid = kk % 5 == 0
+            // красная зона на шкале
+            val rz = R + 4 * dd
+            drawArc(Cj.red.copy(alpha = 0.55f), (ang(redV.toDouble()) * 180 / Math.PI).toFloat(), ((ang(maxV.toDouble()) - ang(redV.toDouble())) * 180 / Math.PI).toFloat(), false,
+                Offset(cx - rz, cy - rz), Size(rz * 2, rz * 2), style = Stroke(2.5f * dd))
+            for (kk in 0..maxV step 2) {
+                val a = ang(kk.toDouble()); val maj = kk % 20 == 0; val mid = kk % 10 == 0
                 val r1 = R + 4 * dd; val r0 = R - (if (maj) 10f else if (mid) 7f else 4f) * dd
                 val lit = kk <= v
+                val zone = kk >= redV
                 drawLine(
-                    if (lit) (if (maj) Color.White else Color(0x8CFFFFFF)) else (if (maj) Color(0x8CFFFFFF) else Color(0x29FFFFFF)),
+                    if (zone) (if (lit) Cj.red else Cj.red.copy(alpha = if (maj) 0.85f else 0.45f))
+                    else if (lit) (if (maj) Color.White else Color(0x8CFFFFFF)) else (if (maj) Color(0x8CFFFFFF) else Color(0x29FFFFFF)),
                     Offset((cx + cos(a) * r0).toFloat(), (cy + sin(a) * r0).toFloat()), Offset((cx + cos(a) * r1).toFloat(), (cy + sin(a) * r1).toFloat()),
                     strokeWidth = (if (maj) 1.6f else 0.9f) * dd,
                 )
                 if (maj) {
-                    val lay = tm.measure("$kk", TextStyle(fontFamily = Manrope, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (lit) Cj.ink else Color(0xFF5B626C)))
+                    val lay = tm.measure("$kk", TextStyle(fontFamily = Manrope, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (zone) Cj.red else if (lit) Cj.ink else Color(0xFF5B626C)))
                     drawText(lay, topLeft = Offset((cx + cos(a) * (R - 22 * dd)).toFloat() - lay.size.width / 2f, (cy + sin(a) * (R - 22 * dd)).toFloat() - lay.size.height / 2f))
                 }
             }
@@ -188,8 +197,8 @@ private fun Dial(v: Double, maxV: Int, col: Color, unit: String, odo: String) {
                 drawCircle(Color.White, 2.5f * dd, e)
             }
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = w * 0.06f)) {
-            val fs = with(LocalDensity.current) { (w * 0.33f).toSp() }
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = w * 0.09f)) {
+            val fs = with(LocalDensity.current) { (w * 0.365f).toSp() }
             Text("${v.roundToInt()}", fontSize = fs, fontWeight = FontWeight(200), letterSpacing = (-2).sp, lineHeight = fs, color = Cj.ink)
             Text(unit, fontSize = 11.sp, letterSpacing = 3.sp, color = Cj.mute, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
@@ -270,15 +279,15 @@ private fun Tiles(items: List<Pair<Pair<String, String>, String>>) {
     Column(Modifier.fillMaxWidth()) {
         items.chunked(3).forEach { row ->
             Box(Modifier.fillMaxWidth().height(1.dp).background(Cj.hair))
-            Row(Modifier.fillMaxWidth().height(58.dp)) {
+            Row(Modifier.fillMaxWidth().height(64.dp)) {
                 row.forEachIndexed { i, (vu, label) ->
                     if (i > 0) Box(Modifier.width(1.dp).fillMaxSize().weight(0.001f).background(Cj.hair))
                     Column(Modifier.weight(1f).padding(start = if (i == 0) 2.dp else 10.dp, top = 6.dp)) {
                         Row(verticalAlignment = Alignment.Bottom) {
-                            Text(vu.first, fontSize = 24.sp, fontWeight = FontWeight(300), letterSpacing = (-0.3).sp)
+                            Text(vu.first, fontSize = 27.sp, fontWeight = FontWeight(300), letterSpacing = (-0.3).sp)
                             if (vu.second.isNotEmpty()) Text(" " + vu.second, fontSize = 11.5.sp, color = Cj.mute, modifier = Modifier.padding(bottom = 3.dp))
                         }
-                        Text(label.uppercase(), fontSize = 9.5.sp, letterSpacing = 1.4.sp, color = Cj.mute, fontWeight = FontWeight.SemiBold)
+                        Text(label.uppercase(), fontSize = 10.5.sp, letterSpacing = 1.4.sp, color = Cj.mute, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
