@@ -653,7 +653,8 @@ static void draw(uint32_t now) {
     uint8_t tb = cfg.bright_tail, bb = cfg.bright_brake;
     bool brake = m == M_BRAKE, accel = m == M_ACCEL, park = m == M_PARK;
     bool warnOn = m == M_WARN && (now / 125) & 1;
-    uint32_t since = now - modeSince;
+    // в проверке режим задан командой - отсчёт от её начала, иначе вспышки стопа и рост полосы уже «прошли»
+    uint32_t since = test ? now - (testUntil - TEST_MS) : now - modeSince;
     // мигающий стоп: в паузе вспышки выбранная часть горит габаритом
     bool lit = brakeLit(since), hasStop = false;
     for (int s = 0; s < cfg.nseg; s++) if (cfg.seg[s].role == R_STOP && cfg.seg[s].count) hasStop = true;
