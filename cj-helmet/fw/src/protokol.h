@@ -83,8 +83,17 @@ enum Fx : uint8_t {
 #define FXF_FRONT_WHITE 0x01   // перед (10% кольца у лба) белый поверх эффекта
 #define FXF_BACK_RED    0x02   // затылок (14% кольца) красный поверх эффекта
 
+// Как моргает стоп (stop_mode)
+enum StopMode : uint8_t {
+  STOP_STEADY = 0,   // ровно ярче
+  STOP_BLINK = 1,    // мигает, пока тормозишь
+  STOP_BURST = 2,    // 4 вспышки, потом ровно (как модули стоп-сигнала на грузовиках)
+  STOP_HARD = 3,     // ровно, а при резком торможении мигает
+  STOP_TRIPLE = 4,   // три вспышки, пауза, снова
+};
+
 // Настройки, хранятся в NVS. Запись в characteristic config - вся структура целиком.
-#define CONFIG_VER 5
+#define CONFIG_VER 6
 struct __attribute__((packed)) Config {
   uint8_t ver;            // = CONFIG_VER
   uint8_t bright_tail;    // габарит, 0-255
@@ -121,12 +130,17 @@ struct __attribute__((packed)) Config {
   uint8_t fx_flags;       // FXF_*
   uint8_t fx_speed;       // множитель скорости бега, %, 25-250
   uint8_t fx_bright;      // яркость эффекта, 0-255
-  uint8_t seg_rgb[MAX_SEG][3];  // свой цвет габарита сегмента; 0,0,0 - цвет роли
+  uint8_t seg_rgb[MAX_SEG][3];  // свой цвет габарита сегмента; 0,0,0 - цвет роли, 1,1,1 - не горит
+  // v6: мигающий стоп
+  uint8_t stop_mode;      // STOP_*
+  uint8_t stop_hz2;       // частота вспышек, 0.5 Гц (8 - 4 Гц)
+  uint8_t stop_zone;      // что моргает: 0 вся красная часть (бока и затылок), 1 затылок, 2 полоса стопа
+  uint8_t stop_hard;      // резкое торможение для STOP_HARD: замедление, км/ч в секунду
 };
 
-static_assert(sizeof(Config) == 108, "Config");
+static_assert(sizeof(Config) == 112, "Config");
 // Размер config прошлых версий: новые поля только дописываются в конец
-static const uint8_t CONFIG_SIZE[] = {0, 30, 33, 34, 74, 108};
+static const uint8_t CONFIG_SIZE[] = {0, 30, 33, 34, 74, 108, 112};
 
 #define CFG_CURRENT_INVERT 0x01
 #define CFG_FRONT_WHITE    0x02

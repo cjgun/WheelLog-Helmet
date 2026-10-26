@@ -112,6 +112,10 @@ static const Config CFG_DEFAULT = {
   100,    // fx_speed
   160,    // fx_bright
   {},     // seg_rgb: цвета ролей
+  STOP_BURST,  // stop_mode: 4 вспышки, потом ровно (выбор владельца 26.10)
+  8,      // stop_hz2: 4 Гц
+  0,      // stop_zone: вся красная часть
+  10,     // stop_hard: 10 км/ч в секунду
 };
 static const neoPixelType STRIP_TYPES[] = {NEO_GRB, NEO_RGB, NEO_BRG, NEO_GRBW, NEO_RGBW};
 #define STRIP_TYPES_N (sizeof(STRIP_TYPES) / sizeof(STRIP_TYPES[0]))
@@ -146,6 +150,7 @@ static uint32_t prevT = 0;
 
 static Mode mode = M_NOSIGNAL;
 static uint32_t modeSince = 0, stillSince = 0;
+static bool brakeHard = false;  // торможение резкое (для STOP_HARD)
 static uint16_t lastMa = 0;
 
 // Проверка и подсветка сегмента из приложения
@@ -295,8 +300,8 @@ class CfgCb : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *c, NimBLEConnInfo &ci) override {
     NimBLEAttValue v = c->getValue();
     Config nc = cfg;
-    // приложение старой версии пишет config v4 (74 байта): поля v5 остаются как были
-    if (v.size() == sizeof nc || (v.size() == CONFIG_SIZE[4] && v.data()[0] == 4)) {
+    // приложение старой версии пишет config v4 (74 байта) или v5 (108): новые поля остаются как были
+    if (v.size() == sizeof nc || (v.size() == CONFIG_SIZE[4] && v.data()[0] == 4) || (v.size() == CONFIG_SIZE[5] && v.data()[0] == 5)) {
       memcpy(&nc, v.data(), v.size());
       nc.ver = CONFIG_VER;
       nc.num_leds = segSum(nc);
@@ -370,6 +375,8 @@ static void updateMode(uint32_t now) {
     float thrT = keep ? cfg.brake_tilt * 0.6f : cfg.brake_tilt;
     bool byTilt = cfg.brake_tilt && spd >= 50 && tilt >= thrT;  // наклон только на ходу, от 5 км/ч
     bool brake = (cfg.brake_decel && a <= -thrA) || (byCur && regen >= thrI) || byTilt;
+    // резкое: замедление сверх stop_hard или наклон назад вдвое сильнее порога стопа
+    brakeHard = brake && ((cfg.stop_hard && a <= -cfg.stop_hard * 10.0f) || (cfg.brake_tilt && spd >= 50 && tilt >= 2.0f * cfg.brake_tilt));
     float thrAcc = mode == M_ACCEL ? cfg.accel * 0.6f : cfg.accel;
     bool acc = cfg.accel && spd >= cfg.min_speed && a >= thrAcc;
     bool warn = (cfg.warn_pwm && pw >= cfg.warn_pwm) || (al & 1);
@@ -589,6 +596,19 @@ static Rgb fxColor(int i, float d, float t, float v, float acc) {
   }
 }
 
+// Мигающий стоп: горит ли стоп сейчас, по времени от начала торможения (since, мс) и stop_mode
+static bool brakeLit(uint32_t since) {
+  float hz = max<uint8_t>(cfg.stop_hz2, 2) / 2.0f, e = since / 1000.0f;
+  auto on = [](float x) { return frac(x) < 0.5f; };
+  switch (cfg.stop_mode) {
+    case STOP_BLINK: return on(e * hz);
+    case STOP_BURST: return e < 4 / hz ? on(e * hz) : true;
+    case STOP_HARD: return brakeHard ? on(e * hz) : true;
+    case STOP_TRIPLE: { float p = 1 / hz, c = fmodf(e, p * 3 + 0.45f); return c < p * 3 ? on(c * hz) : false; }
+    default: return true;
+  }
+}
+
 // Точка кольца в эффекте: перед белый и затылок красный поверх, если включено
 static void fxPixel(int i, uint32_t now, float v, float acc) {
   float d = ringD[i];
@@ -634,6 +654,14 @@ static void draw(uint32_t now) {
     bool brake = m == M_BRAKE, accel = m == M_ACCEL, park = m == M_PARK;
     bool warnOn = m == M_WARN && (now / 125) & 1;
     uint32_t since = now - modeSince;
+    // мигающий стоп: в паузе вспышки выбранная часть горит габаритом
+    bool lit = brakeLit(since), hasStop = false;
+    for (int s = 0; s < cfg.nseg; s++) if (cfg.seg[s].role == R_STOP && cfg.seg[s].count) hasStop = true;
+    auto bk = [&](uint8_t ro) -> uint8_t {
+      bool back = ro == R_BACK || ro == R_STOP;
+      bool z = cfg.stop_zone == 0 || (cfg.stop_zone == 1 && back) || (cfg.stop_zone == 2 && (ro == R_STOP || (!hasStop && ro == R_BACK)));
+      return z && !lit ? tb : bb;
+    };
     // эффект шлема: в обычной езде, на стоянке, при разгоне и без связи; стоп и предупреждение - как всегда
     bool fxOn = cfg.kind == 0 && cfg.fx != FX_CLASSIC && !brake && m != M_WARN;
     float fv = 0, facc = 0;
@@ -663,18 +691,18 @@ static void draw(uint32_t now) {
           case R_PEAK_R: case R_PEAK_L:
             pxs(i, 255, 255, 255, tb); break;
           case R_SIDE_R: case R_SIDE_L:
-            pxs(i, 255, 0, 0, brake ? bb : tb); break;
+            pxs(i, 255, 0, 0, brake ? bk(ro) : tb); break;
           case R_TAIL_R: case R_TAIL_L:
-            pxs(i, 255, 0, 0, brake && (cfg.flags & CFG_TAIL_BRAKE) ? bb : tb); break;
+            pxs(i, 255, 0, 0, brake && (cfg.flags & CFG_TAIL_BRAKE) ? bk(ro) : tb); break;
           case R_BACK:
-            if (brake) pxs(i, 255, 0, 0, bb);
+            if (brake) pxs(i, 255, 0, 0, bk(ro));
             else if (accel) pxs(i, cfg.accel_rgb[0], cfg.accel_rgb[1], cfg.accel_rgb[2], bb);
             else pxs(i, 255, 0, 0, tb);
             break;
           case R_STOP: {
             // стоп растёт от центра к краям за 150 мс
             float mid = (cnt - 1) / 2.0f, grow = min(1.0f, since / 150.0f);
-            if (brake && fabsf(j - mid) <= mid * grow + 0.5f) pxs(i, 255, 0, 0, bb);
+            if (brake && fabsf(j - mid) <= mid * grow + 0.5f) pxs(i, 255, 0, 0, bk(ro));
             else if (accel) pxs(i, cfg.accel_rgb[0], cfg.accel_rgb[1], cfg.accel_rgb[2], bb);
             else pxs(i, 255, 0, 0, tb);
             break;

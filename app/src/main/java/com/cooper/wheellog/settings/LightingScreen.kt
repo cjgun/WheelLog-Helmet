@@ -311,7 +311,7 @@ private fun netCard(link: EspLink) {
 private fun segCard(d: LightDevice, link: EspLink?) {
     val raw = edits[d.id] ?: return
     val c = Cfg(raw)
-    if (!c.ok) { card("Сегменты") { Text("Плата со старой прошивкой (${c.u8(0)}), нужна 4 или 5. Обновите прошивку.") }; return }
+    if (!c.ok) { card("Сегменты") { Text("Плата со старой прошивкой (${c.u8(0)}), нужна 4 или новее. Обновите прошивку.") }; return }
     val segs = c.segs
     val roles = if (d.isHelmet) Role.forHelmet else Role.forWheel
     fun put(list: List<Seg>) { edits[d.id] = c.copy { this.segs = list }.b }
@@ -460,7 +460,21 @@ private fun settingsCards(d: LightDevice, link: EspLink?) {
     if (!c.ok) return
     fun upd(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
     key(raw.hex()) {
-        card("Когда стоп и разгон") { thresholdSliders(c) { f -> upd(f) } }
+        card("Когда стоп и разгон") {
+            thresholdSliders(c) { f -> upd(f) }
+            if (c.hasStopFx) {
+                Text("Как моргает стоп", Modifier.padding(top = 8.dp), fontWeight = FontWeight.Bold)
+                chips(Stop.names, c.stopMode) { i -> upd { stopMode = i } }
+                Text(Stop.hints.getOrElse(c.stopMode) { "" }, style = MaterialTheme.typography.bodySmall)
+                if (c.stopMode != Stop.STEADY) {
+                    Text("Что моргает", Modifier.padding(top = 6.dp))
+                    chips(Stop.zones, c.stopZone) { i -> upd { stopZone = i } }
+                    slider("Частота вспышек, Гц", c.stopHz2 / 2f, 1f, 10f, 0.5f, "%.1f") { v -> upd { stopHz2 = (v * 2).roundToInt() } }
+                }
+                if (c.stopMode == Stop.HARD) slider("Резкое торможение, км/ч в секунду", c.stopHard.toFloat(), 5f, 25f, 1f, "%.0f",
+                    "или наклон назад вдвое сильнее порога стопа") { v -> upd { stopHard = v.roundToInt() } }
+            } else Text("Мигающий стоп появится после обновления прошивки платы.", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall)
+        }
         card("Яркость, цвета, лента") {
             slider("Габарит", c.brightTail.toFloat(), 0f, 255f, 5f, "%.0f") { v -> upd { brightTail = v.roundToInt() } }
             slider("Стоп и поворот", c.brightBrake.toFloat(), 0f, 255f, 5f, "%.0f") { v -> upd { brightBrake = v.roundToInt() } }

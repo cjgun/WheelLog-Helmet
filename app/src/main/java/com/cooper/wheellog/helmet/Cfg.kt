@@ -55,8 +55,8 @@ object Fx {
 }
 
 /**
- * Настройки платы, little-endian (struct Config в fw/src/protokol.h): v5 - 108 байт, v4 (старая прошивка) - 74.
- * Внутри всегда 108 байт; у платы v4 поля v5 не используются и на плату не уходят (forBoard).
+ * Настройки платы, little-endian (struct Config в fw/src/protokol.h): v6 - 112 байт, v5 - 108, v4 - 74.
+ * Внутри всегда 112 байт; у платы старой версии новые поля не используются и на плату не уходят (forBoard).
  * Каждая правка - новая копия, чтобы Compose видел изменение.
  */
 class Cfg(src: ByteArray = DEFAULT) {
@@ -69,11 +69,13 @@ class Cfg(src: ByteArray = DEFAULT) {
     private fun set16(o: Int, v: Int) { bb.putShort(o, v.coerceIn(0, 65535).toShort()) }
 
     val ver get() = u8(0)
-    val ok get() = ver == VER || ver == 4
+    val ok get() = ver in 4..VER
     /** Есть эффекты и свои цвета (прошивка v5). */
     val hasFx get() = ver >= 5
-    /** Байты для записи в плату: v4 - первые 74. */
-    fun forBoard(): ByteArray = if (ver == 4) b.copyOf(SIZE_V4) else b.copyOf()
+    /** Мигающий стоп (прошивка v6). */
+    val hasStopFx get() = ver >= 6
+    /** Байты для записи в плату: v4 - первые 74, v5 - 108. */
+    fun forBoard(): ByteArray = when (ver) { 4 -> b.copyOf(SIZE_V4); 5 -> b.copyOf(SIZE_V5); else -> b.copyOf() }
     var brightTail get() = u8(1); set(v) = set8(1, v)
     var brightBrake get() = u8(2); set(v) = set8(2, v)
     fun flag(m: Int) = u8(3) and m != 0
@@ -105,6 +107,11 @@ class Cfg(src: ByteArray = DEFAULT) {
     /** Свой цвет габарита сегмента; 0,0,0 - цвет роли. */
     fun segRgb(i: Int) = intArrayOf(u8(84 + i * 3), u8(85 + i * 3), u8(86 + i * 3))
     fun setSegRgb(i: Int, v: IntArray) { for (k in 0..2) set8(84 + i * 3 + k, v[k]) }
+    // v6: мигающий стоп
+    var stopMode get() = u8(108); set(v) = set8(108, v)          // Stop.*
+    var stopHz2 get() = u8(109); set(v) = set8(109, v.coerceIn(2, 20))  // 0.5 Гц
+    var stopZone get() = u8(110); set(v) = set8(110, v)          // 0 вся красная часть, 1 затылок, 2 полоса стопа
+    var stopHard get() = u8(111); set(v) = set8(111, v)          // км/ч в секунду
 
     var segs: List<Seg>
         get() = (0 until u8(35).coerceIn(0, MAX_SEG)).map { i ->
@@ -133,11 +140,12 @@ class Cfg(src: ByteArray = DEFAULT) {
     }
 
     companion object {
-        const val VER = 5
-        const val SIZE = 108
+        const val VER = 6
+        const val SIZE = 112
+        const val SIZE_V5 = 108
         const val SIZE_V4 = 74
-        /** То, что прочитано с платы, - настройки (v4 или v5). */
-        fun isBoardCfg(v: ByteArray?) = v != null && ((v.size == SIZE && v[0].toInt() == VER) || (v.size == SIZE_V4 && v[0].toInt() == 4))
+        /** То, что прочитано с платы, - настройки (v4, v5 или v6). */
+        fun isBoardCfg(v: ByteArray?) = v != null && ((v.size == SIZE && v[0].toInt() == VER) || (v.size == SIZE_V5 && v[0].toInt() == 5) || (v.size == SIZE_V4 && v[0].toInt() == 4))
         const val MAX_SEG = 8
         const val F_CURRENT_INVERT = 0x01; const val F_FRONT_WHITE = 0x02; const val F_CALIBRATE = 0x04; const val F_TAIL_BRAKE = 0x08
         const val RIM_FLASH_WARN = 0x01; const val RIM_FLASH_BRAKE = 0x02; const val RIM_OFF_PARK = 0x04
@@ -160,6 +168,7 @@ class Cfg(src: ByteArray = DEFAULT) {
             a[68] = 255.toByte(); a[69] = 90; a[70] = 0; a[71] = 85; a[72] = RIM_FLASH_WARN.toByte(); a[73] = RELAY_SEND.toByte()
             a[74] = Fx.CLASSIC.toByte(); a[75] = 0; a[76] = 200.toByte(); a[77] = 255.toByte(); a[78] = 122; a[79] = 0; a[80] = 255.toByte()
             a[81] = (Fx.F_FRONT_WHITE or Fx.F_BACK_RED).toByte(); a[82] = 100; a[83] = 160.toByte()
+            a[108] = Stop.BURST.toByte(); a[109] = 8; a[110] = 0; a[111] = 10
         }.let { Cfg(it).apply { segs = TEMPLATE_FF }.b }
 
         fun forKind(kind: DevKind): Cfg = Cfg().copy {
@@ -170,4 +179,17 @@ class Cfg(src: ByteArray = DEFAULT) {
             }
         }
     }
+}
+
+/** Как моргает стоп (stop_mode), как StopMode в прошивке. */
+object Stop {
+    const val STEADY = 0; const val BLINK = 1; const val BURST = 2; const val HARD = 3; const val TRIPLE = 4
+    val names = listOf("Ровно ярче", "Мигает всё время", "Вспышки, потом ровно", "Мигает при резком", "Тройная вспышка")
+    val hints = listOf(
+        "При торможении красное горит ярче и ровно.",
+        "Пока тормозишь, стоп мигает.",
+        "4 быстрые вспышки, потом горит ровно ярко - как модули стоп-сигнала на грузовиках.",
+        "Обычное торможение - ровно ярче, резкое - мигает, как аварийный стоп-сигнал у машин.",
+        "Три вспышки, пауза, снова три - ритм не спутать с поворотником.")
+    val zones = listOf("Вся красная часть", "Только затылок", "Только полоса стопа")
 }
