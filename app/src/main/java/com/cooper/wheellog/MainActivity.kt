@@ -633,6 +633,8 @@ class MainActivity : AppCompatActivity() {
         // add pages into main view
         pager = binding.pager
         pager.offscreenPageLimit = 10
+        // новый дизайн: старые страницы WheelLog листанием не показываем, «Езда» - один экран
+        pager.isUserInputEnabled = false
         val pages = ArrayList<Int>()
         pages.add(R.layout.main_view_main)
         pages.add(R.layout.main_view_params_list)

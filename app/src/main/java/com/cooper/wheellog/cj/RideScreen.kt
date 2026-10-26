@@ -126,9 +126,7 @@ fun RideScreen(appConfig: AppConfig = koinInject()) {
             fmt(r.cur) to "А" to "Ток", fmt(r.power / 1000, 2) to "кВт" to "Мощность", "${r.temp}" to "°C" to "Темп.",
             fmt(r.trip * k) to (if (mph) "ми" else "км") to "Поездка", fmt(r.avg * k) to (if (mph) "ми/ч" else "км/ч") to "Средняя", r.time to "" to "В пути",
         ))
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Center) {
-            (0 until 4).forEach { i -> Box(Modifier.padding(horizontal = 3.dp).height(5.dp).width(if (i == 0) 18.dp else 5.dp).clip(RoundedCornerShape(3.dp)).background(if (i == 0) Cj.ink else Cj.dim)) }
-        }
+        Spacer(Modifier.height(10.dp))
     }
     if (wide) {
         Box(Modifier.width(1.dp).fillMaxHeight().background(Cj.hair))
