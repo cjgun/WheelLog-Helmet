@@ -1,0 +1,146 @@
+<title>Главный экран: три варианта</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700;800&family=Onest:wght@400;500;600&display=swap">
+<style>
+/* Три телефона в ряд (на телефоне столбиком), под каждым - чем вариант отличается. Экраны тёмные, страница - по теме. */
+:root{
+  --pg:#e9e8e3;--pg-ink:#1d1d1b;--pg-mute:#67645d;
+  --bg:#0b0e11;--card:#1a1f26;--line:#2a313a;--ink:#e5e7eb;--mute:#8b939f;--or:#ff8a00;--yel:#ffc107;--grn:#22c55e;--red:#ef4444;--blu:#38bdf8;
+  --f-num:"Exo 2",system-ui,sans-serif;--f-ui:"Onest",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--pg:#101112;--pg-ink:#e9e8e3;--pg-mute:#9a968d;color-scheme:dark}}
+:root[data-theme="dark"]{--pg:#101112;--pg-ink:#e9e8e3;--pg-mute:#9a968d;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--pg-ink);font:15px/1.5 var(--f-ui);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+.wrap{max-width:1200px;margin:0 auto;display:grid;gap:20px}
+h1{font:800 clamp(24px,3.6vw,34px)/1.1 var(--f-num);margin:0}
+.lead{color:var(--pg-mute);margin:0;max-width:66ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:28px 22px;align-items:start}
+.v{display:grid;gap:10px;min-width:0}
+.v h2{font:700 18px var(--f-num);margin:0}
+.v p{margin:0;color:var(--pg-mute);font-size:14px}
+.ph{background:var(--bg);color:var(--ink);border-radius:32px;border:1px solid #000;overflow:hidden;height:720px;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;box-shadow:0 22px 50px -28px rgba(0,0,0,.7)}
+.sb{display:flex;justify-content:space-between;padding:10px 20px 2px;font:600 12px var(--f-num);color:var(--mute)}
+.ab{display:flex;align-items:center;gap:6px;padding:4px 14px 0}
+.ab .clock{font:600 26px var(--f-num);color:#cfd5dd;flex:1;letter-spacing:.02em}
+.ab i{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:var(--mute)}
+.ab i svg{width:22px;height:22px}
+.ab i.on{color:var(--or)}
+.main{display:grid;align-content:start;gap:4px;padding:0 14px;min-height:0}
+.g{position:relative}
+.g canvas{display:block;width:100%;height:auto}
+.g .c{position:absolute;inset:0;display:grid;place-items:center;align-content:center}
+.big{font:800 96px/0.9 var(--f-num);letter-spacing:-.03em}
+.u{font:600 16px var(--f-num);color:var(--mute);text-align:center}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px 10px;padding:6px 6px 0}
+.two div{display:grid;justify-items:center}
+.two b{font:700 30px/1.1 var(--f-num);font-variant-numeric:tabular-nums}
+.two b small{font-size:15px;color:var(--mute);margin-left:3px;font-weight:600}
+.two span{font-size:13px;color:var(--mute)}
+.dots{display:flex;gap:6px;justify-content:center;padding:6px 0 4px}
+.dots i{width:22px;height:4px;border-radius:2px;background:#2a313a}.dots i.on{background:var(--or);width:40px}
+.nav{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);padding:6px 6px 10px;background:#0f1317}
+.nav span{display:grid;justify-items:center;gap:2px;font:600 11px var(--f-ui);color:var(--mute)}
+.nav span.on{color:var(--or)}
+.nav svg{width:20px;height:20px}
+.lt{display:flex;align-items:center;gap:8px;background:#1d1408;border:1px solid #3a2608;border-radius:12px;padding:6px 10px;font-size:12.5px;color:#ffcf99}
+.lt b{color:var(--or);font-weight:700}
+.bars{display:grid;gap:10px;padding:4px 4px 0}
+.bar{display:grid;gap:4px}
+.bar .r{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mute)}
+.bar .r b{font:700 15px var(--f-num);color:var(--ink)}
+.bar .t{height:12px;border-radius:6px;background:#1f262e;overflow:hidden;position:relative}
+.bar .t i{position:absolute;inset:0 auto 0 0;border-radius:6px}
+.pick{font:600 14px var(--f-ui);color:var(--pg-ink)}
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:8px">
+    <h1>Главный экран: три варианта</h1>
+    <p class="lead">Как у WheelLog: спидометр на всю ширину, крупные значения в два столбца, ничего лишнего. Страницы листаются пальцем, как в оригинале. Кнопки записи и шлема - в шапке значками. Цифры - из твоего журнала 20.10.</p>
+  </header>
+  <div class="grid">
+    <section class="v">
+      <h2>1. Классика</h2>
+      <div class="ph">
+        <div class="sb"><span>18:05</span><span>5G · 92%</span></div>
+        <div class="ab"><span class="clock">18:05:12</span><i class="on" title="колесо"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></i><i title="запись"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="#ef4444"/></svg></i><i class="on" title="шлем"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c0-5 3.6-9 8-9s8 4 8 9"/><path d="M4 15h16v2H4z"/></svg></i><i title="меню"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></i></div>
+        <div class="main">
+          <div class="g"><canvas data-g="classic" width="660" height="560"></canvas><div class="c"><span class="big">32</span><span class="u">км/ч</span></div></div>
+          <div class="two">
+            <div><b>42<small>%</small></b><span>PWM</span></div><div><b>68<small>%</small></b><span>Макс. PWM</span></div>
+            <div><b>139.3<small>В</small></b><span>Напряжение</span></div><div><b>19.9<small>км/ч</small></b><span>Средняя</span></div>
+            <div><b>0:33</b><span>В пути</span></div><div><b>46<small>км/ч</small></b><span>Макс. скорость</span></div>
+            <div><b>10.9<small>км</small></b><span>Поездка</span></div><div><b>8 170<small>км</small></b><span>Всего</span></div>
+          </div>
+          <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="nav"><span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/></svg>Езда</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c0-5 3.6-9 8-9s8 4 8 9"/><path d="M4 15h16v2H4z"/></svg>Свет</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19c3-7 5 2 8-6s4-6 6-7"/></svg>Поездки</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Колесо</span></div>
+      </div>
+      <p>Раскладка WheelLog один в один: большая дуга скорости, слева внутри дуга заряда, справа - температуры, под ней 8 значений в два столбца. Меняется только стиль.</p>
+    </section>
+
+    <section class="v">
+      <h2>2. Классика + свет</h2>
+      <div class="ph">
+        <div class="sb"><span>18:05</span><span>5G · 92%</span></div>
+        <div class="ab"><span class="clock">18:05:12</span><i class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></i><i><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="#ef4444"/></svg></i><i class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c0-5 3.6-9 8-9s8 4 8 9"/><path d="M4 15h16v2H4z"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></i></div>
+        <div class="main">
+          <div class="g"><canvas data-g="pwm" width="660" height="560"></canvas><div class="c"><span class="big">32</span><span class="u">км/ч · PWM <b style="color:var(--yel)">42%</b></span></div></div>
+          <div class="lt"><span style="width:8px;height:8px;border-radius:50%;background:var(--or);box-shadow:0 0 8px var(--or)"></span><b>Свет: норма</b><span style="flex:1">HJC и MX700 на связи</span><span>стоп вспышками</span></div>
+          <div class="two">
+            <div><b>139.3<small>В</small></b><span>Напряжение</span></div><div><b>70<small>%</small></b><span>Заряд</span></div>
+            <div><b>7.5<small>А</small></b><span>Ток</span></div><div><b>1.05<small>кВт</small></b><span>Мощность</span></div>
+            <div><b>10.9<small>км</small></b><span>Поездка</span></div><div><b>19.9<small>км/ч</small></b><span>Средняя</span></div>
+          </div>
+          <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="nav"><span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/></svg>Езда</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c0-5 3.6-9 8-9s8 4 8 9"/><path d="M4 15h16v2H4z"/></svg>Свет</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19c3-7 5 2 8-6s4-6 6-7"/></svg>Поездки</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Колесо</span></div>
+      </div>
+      <p>То же, но вторая внутренняя дуга - PWM (то, что важнее всего на ходу), и одна тонкая строка состояния света. Вместо 8 значений 6, зато крупнее.</p>
+    </section>
+
+    <section class="v">
+      <h2>3. Цифры и полосы</h2>
+      <div class="ph">
+        <div class="sb"><span>18:05</span><span>5G · 92%</span></div>
+        <div class="ab"><span class="clock">18:05:12</span><i class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></i><i><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="#ef4444"/></svg></i><i class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c0-5 3.6-9 8-9s8 4 8 9"/><path d="M4 15h16v2H4z"/></svg></i><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></i></div>
+        <div class="main">
+          <div style="display:grid;justify-items:center;padding:22px 0 10px"><span class="big" style="font-size:150px">32</span><span class="u">км/ч</span></div>
+          <div class="bars">
+            <div class="bar"><div class="r"><span>PWM</span><b>42%</b></div><div class="t"><i style="width:42%;background:linear-gradient(90deg,var(--grn),var(--yel))"></i></div></div>
+            <div class="bar"><div class="r"><span>Заряд</span><b>70% · 139.3 В</b></div><div class="t"><i style="width:70%;background:var(--grn)"></i></div></div>
+            <div class="bar"><div class="r"><span>Температура</span><b>34 °C</b></div><div class="t"><i style="width:34%;background:var(--blu)"></i></div></div>
+          </div>
+          <div class="two" style="margin-top:8px">
+            <div><b>7.5<small>А</small></b><span>Ток</span></div><div><b>1.05<small>кВт</small></b><span>Мощность</span></div>
+            <div><b>10.9<small>км</small></b><span>Поездка</span></div><div><b>19.9<small>км/ч</small></b><span>Средняя</span></div>
+          </div>
+          <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="nav"><span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/></svg>Езда</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15c0-5 3.6-9 8-9s8 4 8 9"/><path d="M4 15h16v2H4z"/></svg>Свет</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19c3-7 5 2 8-6s4-6 6-7"/></svg>Поездки</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Колесо</span></div>
+      </div>
+      <p>Без круглой шкалы: скорость самая крупная на экране, PWM, заряд и температура - полосами, их видно краем глаза. Самый читаемый на солнце.</p>
+    </section>
+  </div>
+  <p class="pick">Выбери номер или скажи, что взять из какого. Нижние вкладки можно и убрать, если хочется ровно как в WheelLog - тогда Свет, Поездки и Колесо в меню.</p>
+</div>
+
+<script>
+function arc(g,cx,cy,R,a,b,col,w,glow){g.lineWidth=w;g.lineCap='butt';g.strokeStyle=col;if(glow){g.shadowColor=col;g.shadowBlur=glow;}g.beginPath();g.arc(cx,cy,R,a,b);g.stroke();g.shadowBlur=0;}
+document.querySelectorAll('canvas[data-g]').forEach(c=>{const g=c.getContext('2d'),W=c.width,H=c.height,cx=W/2,cy=H*0.56,R=W*0.45;
+  const a0=Math.PI*0.75,a1=Math.PI*2.25,span=a1-a0;
+  arc(g,cx,cy,R,a0,a1,'#1b2128',56);
+  const gr=g.createLinearGradient(0,0,W,0);gr.addColorStop(0,'#ffc107');gr.addColorStop(0.55,'#ff8a00');gr.addColorStop(1,'#ef4444');
+  arc(g,cx,cy,R,a0,a0+span*32/60,gr,56,22);
+  g.fillStyle='#8b939f';g.font='600 22px "Exo 2"';g.textAlign='center';
+  for(let s=0;s<=60;s+=10){const a=a0+span*s/60;g.fillText(s,cx+Math.cos(a)*(R-56),cy+Math.sin(a)*(R-56)+8);}
+  const r2=R*0.62,inner=c.dataset.g==='pwm';
+  // левая внутренняя дуга - заряд, правая - температура (или PWM)
+  const l0=Math.PI*0.80,l1=Math.PI*1.20,r0=Math.PI*1.80,r1=Math.PI*2.20;
+  arc(g,cx,cy,r2,l0,l1,'#1b2128',14);arc(g,cx,cy,r2,l1-(l1-l0)*0.70,l1,'#22c55e',14,10);
+  arc(g,cx,cy,r2,r0,r1,'#1b2128',14);
+  if(inner)arc(g,cx,cy,r2,r1-(r1-r0)*0.42,r1,'#ffc107',14,10);else arc(g,cx,cy,r2,r1-(r1-r0)*0.34,r1,'#38bdf8',14,10);
+  g.font='600 18px "Exo 2"';g.fillStyle='#22c55e';g.fillText('70%',cx-r2*0.80,cy+r2*0.62);g.fillStyle=inner?'#ffc107':'#38bdf8';g.fillText(inner?'PWM':'34°',cx+r2*0.80,cy+r2*0.62);
+});
+</script>

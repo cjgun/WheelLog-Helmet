@@ -1,0 +1,146 @@
+<title>Прошивка CJ-Helmet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Макет будущей страницы cjgun.ru/proshivka/: слева три шага, справа телефон с тем, что человек увидит в приложении */
+:root{
+  --bg:#f4f3ef; --panel:#ffffff; --ink:#171614; --mute:#6b665e; --line:#e2ded6; --accent:#d9692e; --accent-ink:#fff; --ok:#2f8f5b; --soft:#f6e6dc;
+  --f-display:"Golos Text",system-ui,sans-serif; --f-body:"Golos Text",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#141413;--panel:#1d1c1a;--ink:#f1efe9;--mute:#a39d92;--line:#2f2d2a;--accent:#e07b45;--accent-ink:#141413;--ok:#4cc184;--soft:#2b201a;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141413;--panel:#1d1c1a;--ink:#f1efe9;--mute:#a39d92;--line:#2f2d2a;--accent:#e07b45;--accent-ink:#141413;--ok:#4cc184;--soft:#2b201a;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--f-body);margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 64px}
+.wrap{max-width:1120px;margin:0 auto;display:grid;gap:28px}
+.tag{font:600 12px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{font:900 clamp(30px,5vw,48px)/1.05 var(--f-display);margin:6px 0 10px;text-wrap:balance}
+h2{font:700 20px/1.25 var(--f-display);margin:0;text-wrap:balance}
+p{margin:0;max-width:62ch}
+.lead{color:var(--mute);font-size:18px}
+.mock{font:500 13px var(--f-mono);color:var(--mute);border:1px dashed var(--line);border-radius:8px;padding:8px 12px;width:fit-content}
+.grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.steps{display:grid;gap:16px}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;display:grid;gap:14px;min-width:0}
+.num{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--soft);color:var(--accent);font:700 15px var(--f-mono);margin-right:10px}
+.head{display:flex;align-items:center}
+.choice{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.opt{border:2px solid var(--line);border-radius:12px;padding:14px;background:transparent;color:var(--ink);text-align:left;font:inherit;cursor:pointer;display:grid;gap:4px}
+.opt b{font-size:17px}
+.opt span{color:var(--mute);font-size:14px}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--soft)}
+.opt:focus-visible,.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn{border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:700 18px var(--f-body);padding:16px 22px;cursor:pointer;width:100%}
+.btn[disabled]{opacity:.6;cursor:default}
+.hint{color:var(--mute);font-size:14px}
+.bar{height:10px;border-radius:6px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.status{font:500 14px var(--f-mono);color:var(--mute);font-variant-numeric:tabular-nums}
+.status.ok{color:var(--ok)}
+.phone{background:var(--panel);border:1px solid var(--line);border-radius:34px;padding:14px;max-width:360px;margin:0 auto;width:100%;box-shadow:0 18px 40px rgba(0,0,0,.12)}
+.screen{border-radius:24px;background:var(--bg);padding:18px 16px;display:grid;gap:12px;min-height:520px;align-content:start}
+.appbar{font:700 17px var(--f-display);display:flex;justify-content:space-between;align-items:center}
+.found{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:6px}
+.found .row{display:flex;justify-content:space-between;gap:8px;font-size:14px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);margin-right:6px}
+.field{display:grid;gap:4px;font-size:13px;color:var(--mute)}
+.field div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:var(--ink);font-size:15px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg span{font-size:13px;border-radius:999px;padding:5px 10px;background:var(--panel);border:1px solid var(--line)}
+.seg span.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.pbtn{border-radius:12px;background:var(--accent);color:var(--accent-ink);text-align:center;font-weight:700;padding:12px}
+.cap{text-align:center;color:var(--mute);font-size:14px;margin-top:10px}
+.compare{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;display:grid;gap:12px;min-width:0}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:15px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 12px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag">cjgun.ru/proshivka · макет</div>
+    <h1>Прошить плату за минуту</h1>
+    <p class="lead">Плата ESP32, кабель USB и браузер Chrome. Ничего не устанавливать, пароли в прошивку не зашиваются: Wi-Fi и ленту настраиваешь потом в приложении.</p>
+  </header>
+  <div class="mock">Это картинка будущей страницы. Кнопка ниже только показывает, как пойдёт прошивка.</div>
+
+  <div class="grid">
+    <section class="steps" aria-label="Шаги">
+      <div class="step">
+        <div class="head"><span class="num">1</span><h2>Что прошиваем</h2></div>
+        <div class="choice">
+          <button class="opt" id="r-helmet" aria-pressed="true"><b>Шлем</b><span>стоп-сигнал и подсветка на шлеме</span></button>
+          <button class="opt" id="r-wheel" aria-pressed="false"><b>Колесо</b><span>провод от колеса, лента корпуса</span></button>
+        </div>
+        <p class="hint">Плату страница определит сама: ESP32-C3 SuperMini или nanoESP32-C6.</p>
+      </div>
+
+      <div class="step">
+        <div class="head"><span class="num">2</span><h2>Подключи и прошей</h2></div>
+        <p class="hint">Кабель USB-C с передачей данных. Компьютер или Android с Chrome. Если плата не видна - держи BOOT, нажми RST, отпусти BOOT.</p>
+        <button class="btn" id="go">Подключить и прошить</button>
+        <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+        <div class="status" id="st">Ждёт подключения</div>
+      </div>
+
+      <div class="step">
+        <div class="head"><span class="num">3</span><h2>Настрой в приложении</h2></div>
+        <p>Открой «WheelLog Шлем» → «Подсветка». Плата найдётся по Bluetooth сама. Там же: сколько точек на ленте, где лоб и где затылок, Wi-Fi для обновлений.</p>
+        <p class="hint">Обновления дальше приходят из приложения, кабель больше не нужен.</p>
+      </div>
+    </section>
+
+    <aside>
+      <div class="phone" aria-label="Экран приложения">
+        <div class="screen">
+          <div class="appbar"><span>Подсветка</span><span class="status">12:40</span></div>
+          <div class="found">
+            <div class="row"><b><span class="dot"></span>CJ-Шлем-7C8C</b><span class="hint">новая</span></div>
+            <div class="row"><span class="hint">ESP32-C3 · прошивка 25.10</span><span class="hint">-48 dBm</span></div>
+          </div>
+          <div class="field">Имя шлема<div>LS2 Subverter</div></div>
+          <div class="field">Точек на ленте<div>130</div></div>
+          <div class="field">Сегменты
+            <div class="seg"><span>лоб 26</span><span>левый бок 26</span><span class="on">затылок 26</span><span>правый бок 26</span><span>верх 26</span></div>
+          </div>
+          <div class="field">Wi-Fi для обновлений (можно пропустить)<div>Домашняя сеть ▾</div></div>
+          <div class="pbtn">Проверить стоп 5 с</div>
+        </div>
+      </div>
+      <p class="cap">Так плата появится в приложении после прошивки</p>
+    </aside>
+  </div>
+
+  <section class="compare">
+    <h2>Чем отличается от того, как сейчас</h2>
+    <div class="tbl"><table>
+      <thead><tr><th></th><th>Сейчас</th><th>Будет</th></tr></thead>
+      <tbody>
+        <tr><td>Прошивка</td><td>собираю я на MiniGUN, PlatformIO, плата по USB к серверу</td><td>кнопка на сайте, браузер Chrome</td></tr>
+        <tr><td>Wi-Fi и пароль</td><td>зашиты в прошивку</td><td>вводятся в приложении, в прошивке нет</td></tr>
+        <tr><td>Шлем или колесо</td><td>одна прошивка, роль в приложении</td><td>то же, выбор ещё и на шаге 1</td></tr>
+        <tr><td>Обновления</td><td>по Wi-Fi с сервера, только в домашней сети</td><td>из приложения, с телефона по Bluetooth или Wi-Fi</td></tr>
+        <tr><td>Кто может повторить</td><td>только мы</td><td>любой с платой и лентой</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+</div>
+
+<script>
+const rH=document.getElementById('r-helmet'), rW=document.getElementById('r-wheel');
+function pick(a,b){a.setAttribute('aria-pressed','true');b.setAttribute('aria-pressed','false');}
+rH.onclick=()=>pick(rH,rW); rW.onclick=()=>pick(rW,rH);
+const go=document.getElementById('go'), bar=document.getElementById('bar'), st=document.getElementById('st');
+go.onclick=()=>{
+  go.disabled=true; st.className='status'; let p=0;
+  const role=rW.getAttribute('aria-pressed')==='true'?'колесо':'шлем';
+  st.textContent='Найдена ESP32-C3, MAC 48:f6:ee:12:7c:8c';
+  const t=setInterval(()=>{p+=4; bar.style.width=Math.min(p,100)+'%';
+    if(p>8) st.textContent='Записываю прошивку ('+role+'): '+Math.min(p,100)+'%';
+    if(p>=100){clearInterval(t); st.textContent='Готово. Открой приложение, плата найдётся сама'; st.className='status ok'; go.disabled=false; go.textContent='Прошить ещё одну';}
+  },120);
+};
+</script>

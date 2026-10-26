@@ -1,0 +1,215 @@
+<title>Главный экран: два прибора</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;500;600;700&display=swap">
+<title>Главный экран: два прибора</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;500;600;700&display=swap">
+<style>
+/* Два живых телефона рядом. Экран: тонкие линии, цифры тонким начертанием, один акцент, без рамок. */
+:root{
+  --pg:#e8e7e2;--pg-ink:#1b1b19;--pg-mute:#66635c;
+  --bg0:#07080a;--bg1:#0d1014;--hair:rgba(255,255,255,.07);--ink:#eef0f2;--mute:#7d848e;--dim:#4a5059;
+  --acc:#ff9a2e;--warm:#ffcf8a;--red:#ff4b3e;--grn:#4fd18b;
+  --f:"Manrope",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--pg:#0f1011;--pg-ink:#e8e7e2;--pg-mute:#99958c;color-scheme:dark}}
+:root[data-theme="dark"]{--pg:#0f1011;--pg-ink:#e8e7e2;--pg-mute:#99958c;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--pg-ink);font:15px/1.5 var(--f);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:26px 48px}
+.wrap{max-width:960px;margin:0 auto;display:grid;gap:22px}
+h1{font:600 clamp(24px,3.4vw,32px)/1.15 var(--f);margin:0;letter-spacing:-.01em}
+.lead{color:var(--pg-mute);margin:0;max-width:64ch}
+.ctl{display:flex;flex-wrap:wrap;gap:8px}
+.ctl button{border:1px solid color-mix(in srgb,var(--pg-ink) 18%,transparent);background:none;color:var(--pg-ink);font:600 13.5px var(--f);border-radius:999px;padding:8px 14px;cursor:pointer}
+.ctl button[aria-pressed="true"]{background:var(--pg-ink);color:var(--pg)}
+.grid{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:30px 32px;align-items:start}
+@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+.v{display:grid;gap:10px;min-width:0}
+.v h2{font:600 17px var(--f);margin:0}
+.v p{margin:0;color:var(--pg-mute);font-size:14px}
+.ph{position:relative;height:760px;border-radius:38px;overflow:hidden;color:var(--ink);
+  background:radial-gradient(120% 70% at 50% 34%,#161a20 0%,var(--bg1) 45%,var(--bg0) 100%);
+  box-shadow:0 0 0 1px #000,0 0 0 9px #16181b,0 0 0 10px #2a2d31,0 30px 60px -30px rgba(0,0,0,.8);display:grid;grid-template-rows:auto auto 1fr auto}
+.ph::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.05;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+.sb{display:flex;justify-content:space-between;padding:14px 26px 0;font:600 12px var(--f);color:var(--mute)}
+.top{display:flex;align-items:center;gap:14px;padding:12px 22px 0}
+.top .w{flex:1;min-width:0}
+.top .w b{display:block;font:600 15px var(--f);letter-spacing:.01em}
+.top .w span{font:500 11px var(--f);color:var(--mute);letter-spacing:.14em;text-transform:uppercase}
+.ic{width:34px;height:34px;display:grid;place-items:center;color:var(--mute);position:relative}
+.ic svg{width:21px;height:21px}
+.ic.on{color:var(--ink)}
+.ic .d{position:absolute;right:5px;top:6px;width:6px;height:6px;border-radius:50%}
+.stage{position:relative;display:grid;align-content:start;justify-items:center;padding-top:6px}
+.stage canvas{display:block;width:100%;height:auto}
+.mid{position:absolute;left:0;right:0;top:0;display:grid;justify-items:center;pointer-events:none}
+.spd{font:200 132px/1 var(--f);letter-spacing:-.05em;font-variant-numeric:tabular-nums;text-shadow:0 0 40px rgba(255,154,46,.10)}
+.unit{font:600 11px var(--f);letter-spacing:.3em;color:var(--mute);margin-top:-4px}
+.sub{display:flex;gap:18px;margin-top:12px;font:500 12px var(--f);color:var(--mute);letter-spacing:.06em}
+.sub b{font:600 15px var(--f);color:var(--ink);letter-spacing:0;font-variant-numeric:tabular-nums}
+.vals{display:grid;grid-template-columns:1fr 1fr;margin:0 22px;border-top:1px solid var(--hair)}
+.vals div{padding:11px 4px 10px;display:grid;gap:0;border-bottom:1px solid var(--hair);grid-template-areas:"v" "k"}
+.vals div span{grid-area:k}.vals div b{grid-area:v}
+.vals div:nth-child(odd){border-right:1px solid var(--hair);padding-right:14px}
+.vals div:nth-child(even){padding-left:16px}
+.vals span{font:600 10.5px var(--f);letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+.vals b{font:300 30px/1.1 var(--f);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.vals b small{font:500 13px var(--f);color:var(--mute);margin-left:4px;letter-spacing:0}
+.foot{display:grid;gap:12px;padding:10px 22px 18px}
+.pages{display:flex;justify-content:center;gap:7px}
+.pages i{width:5px;height:5px;border-radius:50%;background:var(--dim)}.pages i.on{background:var(--ink);width:18px;border-radius:3px}
+.nav{display:flex;justify-content:space-around;border-top:1px solid var(--hair);padding-top:10px}
+.nav span{display:grid;justify-items:center;gap:3px;font:600 10.5px var(--f);letter-spacing:.06em;color:var(--dim)}
+.nav span.on{color:var(--ink)}
+.nav svg{width:20px;height:20px}
+.strip{display:grid;gap:14px;margin:4px 26px 0;width:calc(100% - 52px)}
+.scale{display:grid;gap:6px}
+.scale .r{display:flex;justify-content:space-between;align-items:baseline;font:600 10.5px var(--f);letter-spacing:.16em;color:var(--mute);text-transform:uppercase}
+.scale .r b{font:300 22px var(--f);letter-spacing:-.01em;color:var(--ink);text-transform:none;font-variant-numeric:tabular-nums}
+.scale canvas{width:100%;height:auto;display:block}
+.chip{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:5px 12px 5px 8px;background:rgba(255,154,46,.08);color:var(--warm);font:600 11.5px var(--f);letter-spacing:.04em}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 10px var(--acc)}
+
+.vals{grid-template-columns:1fr 1fr 1fr}
+.vals div:nth-child(odd){border-right:0;padding-right:4px}.vals div:nth-child(even){padding-left:4px}
+.vals div:not(:nth-child(3n)){border-right:1px solid var(--hair)}
+.vals div:nth-child(3n+2),.vals div:nth-child(3n){padding-left:12px}
+.vals b{font-size:26px}
+.mode{display:inline-flex;border:1px solid var(--hair);border-radius:999px;padding:3px;margin:8px auto 0;gap:2px;background:rgba(255,255,255,.02)}
+.mode button{border:0;background:none;color:var(--mute);font:600 11px var(--f);letter-spacing:.14em;text-transform:uppercase;padding:6px 14px;border-radius:999px;cursor:pointer}
+.mode button[aria-pressed="true"]{background:rgba(255,255,255,.09);color:var(--ink)}
+.mode button:focus-visible,.ctl button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.rulers{display:grid;gap:10px;margin:0 22px 8px}
+[hidden]{display:none!important}
+.odo{margin-top:14px;font:500 12px var(--f);color:var(--mute);letter-spacing:.06em;padding:4px 12px;border:1px solid var(--hair);border-radius:8px;font-variant-numeric:tabular-nums}
+.odo b{font:600 16px var(--f);color:var(--ink);letter-spacing:.04em}
+.notes{display:grid;gap:12px;align-content:start}
+.notes h2{font:600 17px var(--f);margin:0}
+.notes ul{margin:0;padding-left:18px;display:grid;gap:6px;color:var(--pg-mute)}
+
+.top .w span{display:inline-flex;align-items:center;gap:6px}
+.top .w b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top{gap:6px}
+.cdot{width:6px;height:6px;border-radius:50%;background:var(--grn);box-shadow:0 0 6px var(--grn)}
+.rec{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:34px;min-width:34px;padding:0 10px;border-radius:999px;border:1px solid var(--hair);background:rgba(255,255,255,.03);color:var(--mute);font:600 10.5px var(--f);letter-spacing:.14em;text-transform:uppercase;cursor:pointer}
+.rec i{width:12px;height:12px;border-radius:50%;border:1.6px solid #ff4b3e;flex:none}
+.rec span:empty{display:none}
+.rec[aria-pressed="true"]{color:#ffb3ad;border-color:rgba(255,75,62,.35);background:rgba(255,75,62,.08)}
+.rec[aria-pressed="true"] i{background:#ff4b3e;border-color:#ff4b3e;box-shadow:0 0 8px #ff4b3e;animation:pl 1.6s infinite}
+@keyframes pl{50%{opacity:.35}}
+.hl{width:38px;height:38px;border:0;background:none;color:var(--dim);display:grid;place-items:center;cursor:pointer;border-radius:10px;padding:0}
+.hl svg{width:28px;height:28px}
+.hl.menu svg{width:22px;height:22px}.hl.menu{color:var(--mute)}
+.led{stroke:#3a3f46}
+[data-light][aria-pressed="true"]{color:#c9ced5}
+[data-light][aria-pressed="true"] .led{stroke:var(--acc);filter:drop-shadow(0 0 3px var(--acc)) drop-shadow(0 0 7px rgba(255,154,46,.6))}
+.lights{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;width:calc(100% - 44px)}
+.lcard{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;border:1px solid var(--hair);background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.01));color:var(--dim);cursor:pointer;text-align:left;min-height:58px}
+.lcard svg{width:34px;height:34px}
+.lcard .tx{display:grid;line-height:1.2}
+.lcard b{font:600 13px var(--f);color:var(--mute)}
+.lcard small{font:500 10.5px var(--f);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.lcard .tg{width:30px;height:18px;border-radius:999px;background:#2a2f36;position:relative}
+.lcard .tg::after{content:"";position:absolute;left:3px;top:3px;width:12px;height:12px;border-radius:50%;background:#5a616b;transition:left .15s}
+.lcard[aria-pressed="true"]{border-color:rgba(255,154,46,.28);background:linear-gradient(180deg,rgba(255,154,46,.09),rgba(255,154,46,.02))}
+.lcard[aria-pressed="true"] b{color:var(--ink)}.lcard[aria-pressed="true"] small{color:var(--warm)}
+.lcard[aria-pressed="true"] .tg{background:var(--acc)}.lcard[aria-pressed="true"] .tg::after{left:15px;background:#1a0d00}
+.rec:focus-visible,.hl:focus-visible,.lcard:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+.range{display:flex;align-items:center;gap:22px;margin-top:16px;padding:10px 22px;border-top:1px solid var(--hair);border-bottom:1px solid var(--hair)}
+.range i{width:1px;align-self:stretch;background:var(--hair)}
+.range div{display:grid;grid-template-columns:auto auto;align-items:baseline;column-gap:5px;justify-items:start}
+.range b{font:300 30px/1.05 var(--f);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.range small{font:500 12px var(--f);color:var(--mute)}
+.range span{grid-column:1/-1;font:600 10.5px var(--f);letter-spacing:.16em;text-transform:uppercase;color:var(--mute)}
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:10px">
+    <h1>Главный экран: два прибора</h1>
+    <p class="lead">Переключатель «Прибор / Цифра» под шапкой (или нажатие по скорости). Под скоростью в обоих режимах - линейки PWM и заряда. У значений цифра сверху, подпись снизу. Состояние меняет цвет.</p>
+    <div class="ctl" id="st" role="group" aria-label="Состояние"><button data-s="ride" aria-pressed="true">Едет 32</button><button data-s="brake" aria-pressed="false">Тормозит</button><button data-s="warn" aria-pressed="false">PWM 86%</button><button data-s="park" aria-pressed="false">Стоит</button></div>
+  </header>
+  <div class="grid">
+    <div class="ph">
+      <div class="sb"><span>18:05</span><span>92%</span></div>
+      <div class="top"><div class="w"><b>Sherman L «Шмель»</b><span><i class="cdot"></i>на связи</span></div>
+<button class="rec" data-rec aria-pressed="false" aria-label="Запись поездки"><i></i><span></span></button>
+<button class="hl" data-light="h" aria-pressed="true" aria-label="Свет шлема"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4.5 19.5C4.5 11.2 9.7 5.5 16.6 5.5c6.3 0 10.9 4.7 10.9 11v3.2a2.3 2.3 0 0 1-2.3 2.3H6.8a2.3 2.3 0 0 1-2.3-2.3z" stroke="currentColor" stroke-width="1.5"/><path d="M15.2 11.2c3.9-.7 8.4-.3 11.8 1.6l.4 3.6H16.7a2 2 0 0 1-2-1.7z" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.3"/><path class="led" d="M6.5 22h19" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+<button class="hl" data-light="w" aria-pressed="true" aria-label="Свет корпуса"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M13 3.5h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="9.5" y="5" width="13" height="20" rx="4.5" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="10" r="1.9" fill="currentColor"/><rect x="14" y="20" width="4" height="9.5" rx="2" fill="currentColor" fill-opacity=".9"/><path d="M4.5 18h5M22.5 18h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path class="led" d="M9.5 11v7M22.5 11v7" stroke-width="2.2" stroke-linecap="round"/></svg></button>
+<button class="hl menu" aria-label="Меню"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 8h14M5 12h14M9 16h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></div>
+      <div class="stage" style="padding-top:0">
+        <div class="mode" role="group" aria-label="Вид прибора"><button data-m="dial" aria-pressed="true">Прибор</button><button data-m="num" aria-pressed="false">Цифра</button></div>
+        <div id="mDial" style="position:relative;width:100%;cursor:pointer" data-tog>
+          <canvas data-dial width="680" height="470"></canvas>
+          <div class="mid" style="top:104px"><span class="spd" data-v>32</span><span class="unit">КМ/Ч</span><span class="odo"><b>8 170.5</b> км</span></div>
+        </div>
+        <div id="mNum" hidden style="display:grid;justify-items:center;padding:10px 0 4px;cursor:pointer;width:100%" data-tog>
+          <span class="spd" data-v style="font-size:172px;line-height:.88">32</span><span class="unit">КМ/Ч</span>
+          <div class="range"><div><b>≈ 41</b><small>км</small><span>Запас хода</span></div><i></i><div><b>22</b><small>Вт·ч/км</small><span>Расход</span></div></div>
+        </div>
+      </div>
+      <div>
+        <div class="rulers">
+          <div class="scale"><div class="r"><span>PWM</span><b data-pwm>42%</b></div><canvas data-lin="pwm" width="700" height="46"></canvas></div>
+          <div class="scale"><div class="r"><span>Заряд · 139.3 В</span><b>70%</b></div><canvas data-lin="bat" width="700" height="46"></canvas></div>
+        </div>
+        <div class="vals"><div><span>Ток</span><b>7.5<small>А</small></b></div><div><span>Мощность</span><b>1.05<small>кВт</small></b></div><div><span>Темп.</span><b>34<small>°C</small></b></div><div><span>Поездка</span><b>10.9<small>км</small></b></div><div><span>Средняя</span><b>19.9<small>км/ч</small></b></div><div><span>В пути</span><b>0:33</b></div></div>
+        <div class="foot"><div class="pages"><i class="on"></i><i></i><i></i><i></i></div><div class="nav"><span class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4.5 16a7.5 7.5 0 1 1 15 0"/><path d="M12 16l3.5-4.5"/></svg>ЕЗДА</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 15.5c0-5.2 3.6-9.5 8-9.5s8 4.3 8 9.5"/><path d="M3.5 15.5h17"/></svg>СВЕТ</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 19c3-7 5 2 8-6s4-6 6-7"/></svg>ПОЕЗДКИ</span><span class=""><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="2.5"/></svg>КОЛЕСО</span></div></div>
+      </div>
+    </div>
+    <div class="notes">
+      <h2>Что изменилось</h2>
+      <ul>
+        <li>Оба прибора в одном экране, переключаются кнопкой «Прибор / Цифра» или нажатием по скорости. Выбор запоминается.</li>
+        <li>PWM и заряд - линейками сразу под скоростью, одинаково в обоих режимах. На PWM отметки 70, 80, 90 - пороги предупреждения из настроек.</li>
+        <li>У значений крупная цифра сверху, подпись под ней, как в WheelLog.</li>
+        <li>Общий пробег колеса (одометр) - под скоростью в «Приборе».</li>
+        <li>Значений шесть вместо четырёх: ток, мощность, температура, поездка, средняя, время в пути. Какие именно - выбирается в настройках, как блоки в WheelLog.</li>
+        <li>Свет: в шапке два значка - шлем и колесо, у включённого светится полоска ленты. Нажатие включает и выключает.</li>
+        <li>В «Цифре» под скоростью - запас хода и расход: сколько км осталось по заряду, ёмкости батареи и твоему расходу Вт·ч/км.</li>
+        <li>Запись поездки - кнопка «Запись» в шапке, во время записи показывает время.</li>
+        <li>Часов в шапке нет: время есть в строке состояния телефона.</li>
+        <li>Листание вбок: Все параметры, График, События.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<script>
+const ST={ride:{v:32,pwm:42,col:'#ff9a2e',chip:'Свет: норма · HJC и MX700'},brake:{v:24,pwm:18,col:'#ff4b3e',chip:'Свет: стоп · вспышки'},warn:{v:44,pwm:86,col:'#ff4b3e',chip:'Свет: предупреждение'},park:{v:0,pwm:0,col:'#4fd18b',chip:'Свет: стоянка · заряд 70%'}};
+let st='ride',cur={v:32,pwm:42},t0=performance.now();
+const MAXV=70;
+function dial(c,v,pwm,col,blink){const g=c.getContext('2d'),W=c.width,H=c.height;g.clearRect(0,0,W,H);
+  const cx=W/2,cy=H*0.61,R=W*0.375,a0=Math.PI*0.72,a1=Math.PI*2.28,sp=a1-a0,ang=x=>a0+sp*x/MAXV;
+  // деления
+  for(let k=0;k<=MAXV;k++){const a=ang(k),maj=k%10===0,mid=k%5===0,r1=R+10,r0=R-(maj?22:mid?14:8);
+    g.strokeStyle=k<=v?(maj?'#fff':'rgba(255,255,255,.55)'):(maj?'rgba(255,255,255,.55)':'rgba(255,255,255,.16)');g.lineWidth=maj?2.4:1.2;
+    g.beginPath();g.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0);g.lineTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1);g.stroke();
+    if(maj){g.fillStyle=k<=v?'#eef0f2':'#5b626c';g.font='500 20px Manrope';g.textAlign='center';g.textBaseline='middle';g.fillText(k,cx+Math.cos(a)*(R-46),cy+Math.sin(a)*(R-46));}}
+  // полоса скорости
+  g.lineCap='round';g.lineWidth=3;g.strokeStyle='rgba(255,255,255,.06)';g.beginPath();g.arc(cx,cy,R+20,a0,a1);g.stroke();
+  if(v>0){const gr=g.createConicGradient?g.createConicGradient(a0,cx,cy):null;if(gr){gr.addColorStop(0,'rgba(255,154,46,0)');gr.addColorStop(Math.min(.99,(ang(v)-a0)/(Math.PI*2)),col);g.strokeStyle=gr;}else g.strokeStyle=col;
+    g.lineWidth=5;g.beginPath();g.arc(cx,cy,R+20,a0,ang(v));g.stroke();
+    if(!blink){const a=ang(v),x=cx+Math.cos(a)*(R+20),y=cy+Math.sin(a)*(R+20);const rg=g.createRadialGradient(x,y,0,x,y,26);rg.addColorStop(0,col);rg.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=rg;g.beginPath();g.arc(x,y,26,0,7);g.fill();g.fillStyle='#fff';g.beginPath();g.arc(x,y,4.5,0,7);g.fill();}}
+}
+function lin(c,kind,val,col){const g=c.getContext('2d'),W=c.width,H=c.height;g.clearRect(0,0,W,H);const y=18;
+  for(let k=0;k<=100;k+=2){const x=4+(W-8)*k/100,maj=k%10===0;g.strokeStyle=k<=val?(kind==='bat'?'rgba(79,209,139,.9)':(k>=80?'#ff4b3e':k>=70?'#ffcf8a':'rgba(255,255,255,.85)')):'rgba(255,255,255,.14)';g.lineWidth=maj?2.4:1.4;g.beginPath();g.moveTo(x,y-(maj?12:7));g.lineTo(x,y+(maj?12:7));g.stroke();}
+  if(kind==='pwm'){[70,80,90].forEach(m=>{const x=4+(W-8)*m/100;g.fillStyle=m>=80?'#ff4b3e':'#ffcf8a';g.font='600 13px Manrope';g.textAlign='center';g.fillText(m,x,H-2);});}
+  else{[20,50].forEach(m=>{const x=4+(W-8)*m/100;g.fillStyle='#7d848e';g.font='600 13px Manrope';g.textAlign='center';g.fillText(m,x,H-2);});}
+  const x=4+(W-8)*val/100;g.fillStyle='#fff';g.beginPath();g.moveTo(x-7,1);g.lineTo(x+7,1);g.lineTo(x,9);g.fill();}
+function frame(now){const s=ST[st];cur.v+=(s.v-cur.v)*0.08;cur.pwm+=(s.pwm-cur.pwm)*0.08;const blink=st==='brake'&&((now-t0)%500)<250;
+  document.querySelectorAll('[data-v]').forEach(e=>e.textContent=Math.round(cur.v));
+  document.querySelectorAll('[data-pwm]').forEach(e=>e.textContent=Math.round(cur.pwm)+(e.closest('.scale')?'%':''));
+    document.querySelectorAll('[data-dial]').forEach(c=>dial(c,cur.v,cur.pwm,(st==='warn'&&((now-t0)%400)<200)?'#ffcf8a':s.col,blink));
+  document.querySelectorAll('[data-lin]').forEach(c=>lin(c,c.dataset.lin,c.dataset.lin==='bat'?70:cur.pwm));
+  requestAnimationFrame(frame);}
+document.querySelectorAll('#st button').forEach(b=>b.onclick=()=>{st=b.dataset.s;t0=performance.now();document.querySelectorAll('#st button').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));});
+let mode='dial';try{mode=localStorage.getItem('spd-mode')||'dial';}catch(e){}
+function setMode(m){mode=m;document.getElementById('mDial').hidden=m!=='dial';document.getElementById('mNum').hidden=m!=='num';document.querySelectorAll('[data-m]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m?'true':'false'));try{localStorage.setItem('spd-mode',m);}catch(e){}}
+document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+document.querySelectorAll('[data-tog]').forEach(el=>el.onclick=e=>{if(e.target.closest('[data-stop]'))return;setMode(mode==='dial'?'num':'dial');});
+document.querySelectorAll('[data-light]').forEach(b=>b.onclick=()=>{const k=b.dataset.light,on=b.getAttribute('aria-pressed')!=='true';document.querySelectorAll(`[data-light="${k}"]`).forEach(x=>{x.setAttribute('aria-pressed',on);const s=x.querySelector('[data-lst]');if(s)s.textContent=on?'горит':'выключен';});});
+document.querySelectorAll('[data-rec]').forEach(b=>b.onclick=()=>{const on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',on);b.querySelector('span').textContent=on?'0:00':'';if(on){const t0=Date.now();b._t=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);b.querySelector('span').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0');},1000);}else clearInterval(b._t);});
+setMode(mode);
+requestAnimationFrame(frame);
+</script>
