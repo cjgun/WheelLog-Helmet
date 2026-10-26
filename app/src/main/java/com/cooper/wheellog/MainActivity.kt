@@ -1107,6 +1107,9 @@ class MainActivity : AppCompatActivity() {
                     }
                     return true
                 }
+                // новый дизайн: «назад» внутри вкладки (раздел, устройство), потом - на «Езду»
+                if (onBackPressedDispatcher.hasEnabledCallbacks()) { onBackPressedDispatcher.onBackPressed(); return true }
+                if (CjState.tab.value != CjTab.RIDE) { cjShowTab(CjTab.RIDE); return true }
                 if (doubleBackToExitPressedOnce) {
                     finish()
                     return true

@@ -31,6 +31,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.cooper.wheellog.helmet.*
 import kotlinx.coroutines.delay
 import kotlin.math.max
@@ -455,7 +458,7 @@ private fun segCard(d: LightDevice, link: EspLink?) {
         if (colorSeg in segs.indices && c.hasFx) {
             Text("Свой цвет сегмента ${colorSeg + 1} (горит в габарите; стоп и повороты - как всегда)", Modifier.padding(top = 6.dp))
             val cur = c.segRgb(colorSeg).let { if (it.contentEquals(SEG_DARK)) intArrayOf(0, 0, 0) else it }
-            colorPicker(cur, allowNone = true) { rgb -> put2 { setSegRgb(colorSeg, if (rgb.isEmpty()) intArrayOf(0, 0, 0) else if (rgb.all { it == 0 }) SEG_DARK else rgb) } }
+            colorPicker(cur, allowNone = true, title = "Цвет сегмента ${colorSeg + 1}") { rgb -> put2 { setSegRgb(colorSeg, if (rgb.isEmpty()) intArrayOf(0, 0, 0) else if (rgb.all { it == 0 }) SEG_DARK else rgb) } }
         } else if (c.hasFx) Text("Нажми цветной квадратик сегмента, чтобы выбрать ему свой цвет.", style = MaterialTheme.typography.bodySmall)
         val s = segs.getOrNull(sel)
         if (s != null) {
@@ -469,14 +472,67 @@ private fun segCard(d: LightDevice, link: EspLink?) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
             if (segs.size < Cfg.MAX_SEG) OutlinedButton(onClick = { put(segs + Seg(10, roles.first())); sel = segs.size }) { Text("+ Сегмент") }
-            OutlinedButton(onClick = { put(when (d.kind) { DevKind.HELMET_MX -> Cfg.TEMPLATE_MX; DevKind.WHEEL -> Cfg.TEMPLATE_WHEEL; else -> Cfg.TEMPLATE_FF }); sel = -1 }) {
-                Text("Шаблон: ${d.kind.title.lowercase()}")
-            }
         }
+        templates(d, c) { nc -> edits[d.id] = nc.b; sel = -1 }
         Text("Всего ${segs.sumOf { it.count }} точек", style = MaterialTheme.typography.bodySmall)
         c.problem()?.let { Text(it, color = Color(0xFFFFB300), modifier = Modifier.padding(top = 4.dp)) }
     }
 }
+
+/**
+ * Шаблоны ленты: готовые (интеграл, мотокросс, колесо) и свои. Свой хранит сегменты (точки, роли, направления)
+ * и свои цвета сегментов; лежит в настройках приложения.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun templates(d: LightDevice, c: Cfg, apply: (Cfg) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences("cj", android.content.Context.MODE_PRIVATE) }
+    val wheel = !d.isHelmet
+    var own by remember { mutableStateOf(org.json.JSONObject(prefs.getString("templates", "{}")!!)) }
+    var ask by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
+        Text("ШАБЛОНЫ", fontSize = 10.5.sp, letterSpacing = 1.6.sp, color = MUTE, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text("Сохранить как шаблон", color = ACC, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable { name = ""; ask = true }.padding(8.dp))
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val built = if (wheel) listOf("Колесо" to Cfg.TEMPLATE_WHEEL) else listOf("Интеграл" to Cfg.TEMPLATE_FF, "Мотокросс" to Cfg.TEMPLATE_MX)
+        built.forEach { (n, segs) ->
+            Text(n, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.border(1.dp, HAIR, RoundedCornerShape(50))
+                .clip(RoundedCornerShape(50)).clickable { apply(c.copy { this.segs = segs }) }.padding(horizontal = 13.dp, vertical = 9.dp))
+        }
+        own.keys().asSequence().toList().forEach { n ->
+            val o = own.getJSONObject(n)
+            if (o.optBoolean("wheel") != wheel) return@forEach
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                Text(n, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = ACC,
+                    modifier = Modifier.border(1.dp, Color(0x73FF9A2E), RoundedCornerShape(50)).clip(RoundedCornerShape(50))
+                        .pointerInput(n) { detectTapGestures(onTap = {
+                            val src = Cfg(hexToBytes(o.getString("cfg")))
+                            apply(c.copy { this.segs = src.segs; for (k in 0 until Cfg.MAX_SEG) setSegRgb(k, src.segRgb(k)) })
+                        }, onLongPress = { menu = true }) }.padding(horizontal = 13.dp, vertical = 9.dp))
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Удалить шаблон") }, onClick = {
+                        menu = false; own.remove(n); prefs.edit().putString("templates", own.toString()).apply(); own = org.json.JSONObject(own.toString())
+                    })
+                }
+            }
+        }
+    }
+    Text("Свой шаблон хранит сегменты, точки, роли, направления и свои цвета. Удалить - долгое нажатие.", fontSize = 12.sp, color = MUTE, modifier = Modifier.padding(top = 6.dp))
+    if (ask) AlertDialog(onDismissRequest = { ask = false }, title = { Text("Свой шаблон") },
+        text = { OutlinedTextField(name, { name = it.take(24) }, label = { Text("Название") }, singleLine = true) },
+        confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = {
+            own.put(name.trim(), org.json.JSONObject().put("wheel", wheel).put("cfg", c.b.hex()))
+            prefs.edit().putString("templates", own.toString()).apply(); own = org.json.JSONObject(own.toString()); ask = false
+        }) { Text("Сохранить") } },
+        dismissButton = { TextButton(onClick = { ask = false }) { Text("Отмена") } })
+}
+
+private fun hexToBytes(s: String) = ByteArray(s.length / 2) { s.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
 
 @Composable
 private fun stepBtn(t: String, f: () -> Unit) {
@@ -504,30 +560,101 @@ private val PALETTE = listOf(intArrayOf(255, 0, 0), intArrayOf(255, 90, 0), intA
 /** Свой цвет сегмента «чёрный» - сегмент в габарите не горит; 0,0,0 у сегмента занято под «цвет роли». */
 private val SEG_DARK = intArrayOf(1, 1, 1)
 
-/** Палитра и ползунок оттенка; allowNone - кнопка «цвет роли» (пустой массив). */
-@OptIn(ExperimentalLayoutApi::class)
+/** Недавние цвета (общие для всего раздела «Свет»), хранятся в настройках приложения. */
+private val recentColors = mutableStateListOf<Int>()
+
+/**
+ * Цвет: строка с образцом, по нажатию - окно снизу: свой цвет квадратом и полосой оттенка, недавние, «Убрать цвет».
+ * Готовой палитры нет (решение владельца). allowNone - «Убрать цвет» отдаёт пустой массив (цвет роли).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun colorPicker(cur: IntArray, allowNone: Boolean = false, onPick: (IntArray) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-        PALETTE.forEach { p ->
-            val on = p.contentEquals(cur)
-            val black = p.all { it == 0 }  // чёрный на тёмном фоне - с обводкой
-            Box(Modifier.size(30.dp).background(Color(p[0], p[1], p[2]), CircleShape)
-                .then(if (black) Modifier.border(1.dp, Color.Gray, CircleShape) else Modifier)
-                .then(if (on) Modifier.background(Color.Transparent).padding(2.dp) else Modifier)
-                .clickable { onPick(p) }) {
-                if (on) Box(Modifier.align(Alignment.Center).size(10.dp).background(if (black) Color.White else Color.Black, CircleShape))
+private fun colorPicker(cur: IntArray, allowNone: Boolean = false, title: String = "Цвет", onPick: (IntArray) -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { ctx.getSharedPreferences("cj", android.content.Context.MODE_PRIVATE) }
+    LaunchedEffect(Unit) {
+        if (recentColors.isEmpty()) prefs.getString("recent_colors", "")!!.split(',').mapNotNull { it.toIntOrNull() }.forEach { recentColors.add(it) }
+    }
+    var open by remember { mutableStateOf(false) }
+    val none = cur.isEmpty() || (allowNone && cur.all { it == 0 })
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { open = true }.padding(vertical = 12.dp)) {
+        Box(Modifier.size(30.dp).clip(CircleShape).background(if (none) Color(0xFF1A1F26) else Color(cur[0], cur[1], cur[2]))
+            .border(1.dp, Color(0x26FFFFFF), CircleShape))
+        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(if (none) "как у роли" else "#%02X%02X%02X".format(cur[0], cur[1], cur[2]), fontSize = 11.5.sp, color = MUTE)
+        }
+        Text("›", fontSize = 20.sp, color = Color(0xFF4A5059))
+    }
+    HorizontalDivider(color = HAIR)
+    if (!open) return
+    val hsv = remember(cur.toList()) { FloatArray(3).also { if (!none) android.graphics.Color.RGBToHSV(cur[0], cur[1], cur[2], it) else { it[1] = 1f; it[2] = 1f } } }
+    var h by remember { mutableFloatStateOf(hsv[0]) }
+    var s by remember { mutableFloatStateOf(hsv[1]) }
+    var v by remember { mutableFloatStateOf(hsv[2]) }
+    fun rgbNow(): IntArray { val c = android.graphics.Color.HSVToColor(floatArrayOf(h, s, v)); return intArrayOf(c shr 16 and 255, c shr 8 and 255, c and 255) }
+    fun done(rgb: IntArray?) {
+        if (rgb != null && rgb.isNotEmpty()) {
+            val c = (rgb[0] shl 16) or (rgb[1] shl 8) or rgb[2]
+            recentColors.remove(c); recentColors.add(0, c); while (recentColors.size > 8) recentColors.removeAt(recentColors.lastIndex)
+            prefs.edit().putString("recent_colors", recentColors.joinToString(",")).apply()
+        }
+        open = false
+    }
+    ModalBottomSheet(onDismissRequest = { done(null) }, containerColor = Color(0xFF111418)) {
+        Column(Modifier.padding(horizontal = 18.dp).padding(bottom = 24.dp)) {
+            val now = rgbNow()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("#%02X%02X%02X".format(now[0], now[1], now[2]), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    color = if (v > 0.6f && s < 0.5f) Color.Black else Color.White,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(now[0], now[1], now[2])).padding(horizontal = 10.dp, vertical = 4.dp))
+            }
+            // квадрат: насыщенность по горизонтали, яркость по вертикали
+            Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(190.dp).clip(RoundedCornerShape(14.dp))
+                .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(Color.White, Color.hsv(h, 1f, 1f))))
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                .pointerInput(Unit) {
+                    detectDragGestures(onDragStart = { o -> s = (o.x / size.width).coerceIn(0f, 1f); v = 1f - (o.y / size.height).coerceIn(0f, 1f); onPick(rgbNow()) },
+                        onDrag = { ch, _ -> s = (ch.position.x / size.width).coerceIn(0f, 1f); v = 1f - (ch.position.y / size.height).coerceIn(0f, 1f) },
+                        onDragEnd = { onPick(rgbNow()) })
+                }
+                .pointerInput(Unit) { detectTapGestures { o -> s = (o.x / size.width).coerceIn(0f, 1f); v = 1f - (o.y / size.height).coerceIn(0f, 1f); onPick(rgbNow()) } }) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val p = Offset(s * size.width, (1 - v) * size.height)
+                    drawCircle(Color(now[0], now[1], now[2]), 9.dp.toPx(), p)
+                    drawCircle(Color.White, 9.dp.toPx(), p, style = Stroke(2.dp.toPx()))
+                }
+            }
+            // полоса оттенка
+            Box(Modifier.padding(top = 14.dp).fillMaxWidth().height(20.dp).clip(RoundedCornerShape(10.dp))
+                .background(androidx.compose.ui.graphics.Brush.horizontalGradient((0..6).map { Color.hsv(it * 60f % 360f, 1f, 1f) }))
+                .pointerInput(Unit) {
+                    detectDragGestures(onDragStart = { o -> h = (o.x / size.width).coerceIn(0f, 0.999f) * 360f },
+                        onDrag = { ch, _ -> h = (ch.position.x / size.width).coerceIn(0f, 0.999f) * 360f }, onDragEnd = { onPick(rgbNow()) })
+                }
+                .pointerInput(Unit) { detectTapGestures { o -> h = (o.x / size.width).coerceIn(0f, 0.999f) * 360f; onPick(rgbNow()) } }) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val p = Offset(h / 360f * size.width, size.height / 2)
+                    drawCircle(Color.hsv(h, 1f, 1f), 9.dp.toPx(), p); drawCircle(Color.White, 9.dp.toPx(), p, style = Stroke(3.dp.toPx()))
+                }
+            }
+            if (recentColors.isNotEmpty()) {
+                Text("НЕДАВНИЕ", fontSize = 10.5.sp, letterSpacing = 1.6.sp, color = MUTE, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    recentColors.forEach { c ->
+                        val rgb = intArrayOf(c shr 16 and 255, c shr 8 and 255, c and 255)
+                        Box(Modifier.size(34.dp).clip(CircleShape).background(Color(rgb[0], rgb[1], rgb[2])).border(1.5.dp, Color(0x40FFFFFF), CircleShape)
+                            .clickable { android.graphics.Color.RGBToHSV(rgb[0], rgb[1], rgb[2], hsv); h = hsv[0]; s = hsv[1]; v = hsv[2]; onPick(rgb) })
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 18.dp)) {
+                if (allowNone) OutlinedButton(onClick = { onPick(IntArray(0)); done(null) }) { Text("Убрать цвет") }
+                Spacer(Modifier.weight(1f))
+                Button(onClick = { val r = rgbNow(); onPick(r); done(r) }, colors = ButtonDefaults.buttonColors(containerColor = ACC, contentColor = Color(0xFF1A0D00))) { Text("Готово") }
             }
         }
-        if (allowNone) OutlinedButton(onClick = { onPick(IntArray(0)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("Цвет роли") }
-    }
-    var hue by remember { mutableFloatStateOf(0f) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Свой", Modifier.width(48.dp), style = MaterialTheme.typography.bodySmall)
-        Slider(value = hue, onValueChange = { hue = it }, onValueChangeFinished = {
-            val c = Color.hsv(hue, 1f, 1f); onPick(intArrayOf((c.red * 255).roundToInt(), (c.green * 255).roundToInt(), (c.blue * 255).roundToInt()))
-        }, valueRange = 0f..359f, modifier = Modifier.weight(1f))
-        Box(Modifier.size(22.dp).background(Color.hsv(hue, 1f, 1f), CircleShape))
     }
 }
 
@@ -545,11 +672,9 @@ private fun fxCard(d: LightDevice, link: EspLink?) {
         chips(Fx.names, c.fx) { i -> upd { fx = i; Fx.defaults[i]?.let { (a, b) -> fxRgb1 = a; fxRgb2 = b } } }
         Text(Fx.hints.getOrElse(c.fx) { "" }, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
         if (c.fx != Fx.CLASSIC) {
-            Text("Цвет 1", Modifier.padding(top = 8.dp), fontWeight = FontWeight.Bold)
-            colorPicker(c.fxRgb1) { rgb -> upd { fxRgb1 = rgb } }
+            colorPicker(c.fxRgb1, title = "Цвет 1") { rgb -> if (rgb.isNotEmpty()) upd { fxRgb1 = rgb } }
             if (c.fx !in listOf(Fx.SOLID, Fx.RAINBOW, Fx.ROAD, Fx.BATTERY)) {
-                Text("Цвет 2", Modifier.padding(top = 8.dp), fontWeight = FontWeight.Bold)
-                colorPicker(c.fxRgb2) { rgb -> upd { fxRgb2 = rgb } }
+                colorPicker(c.fxRgb2, title = "Цвет 2") { rgb -> if (rgb.isNotEmpty()) upd { fxRgb2 = rgb } }
             }
             key(c.fx) {
                 slider("Скорость бега", c.fxSpeed.toFloat(), 25f, 250f, 5f, "%.0f %%", "100 % - как задумано; меньше - спокойнее") { v -> upd { fxSpeed = v.roundToInt() } }
@@ -587,8 +712,7 @@ private fun stopSection(d: LightDevice) {
         card("Повороты и предупреждение") {
             slider("Поворот гаснет через, с", c.turnSec.toFloat(), 1f, 60f, 1f, "%.0f") { v -> upd { turnSec = v.roundToInt() } }
             slider("Предупреждение от PWM, %", c.warnPwm.toFloat(), 0f, 100f, 5f, "%.0f", "0 - не предупреждать") { v -> upd { warnPwm = v.roundToInt() } }
-            Text("Цвет разгона", fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
-            chips(COLORS.map { it.first }, COLORS.indexOfFirst { it.second.contentEquals(c.accelRgb) }) { i -> upd { accelRgb = COLORS[i].second } }
+            colorPicker(c.accelRgb, title = "Цвет разгона") { rgb -> if (rgb.isNotEmpty()) upd { accelRgb = rgb } }
             if (!d.isHelmet) switchRow("Габариты вспыхивают вместе со стопом", c.flag(Cfg.F_TAIL_BRAKE)) { on -> upd { setFlag(Cfg.F_TAIL_BRAKE, on) } }
         }
     }
@@ -619,7 +743,7 @@ private fun pedalSection(d: LightDevice) {
     fun upd(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
     key(c.b.hex()) {
         card("Цвет педалей") {
-            colorPicker(c.pedalRgb) { rgb -> upd { pedalRgb = rgb } }
+            colorPicker(c.pedalRgb, title = "Цвет педалей") { rgb -> if (rgb.isNotEmpty()) upd { pedalRgb = rgb } }
             Text("На стоянке педали показывают заряд колеса зелёной шкалой.", fontSize = 12.sp, color = MUTE, modifier = Modifier.padding(top = 6.dp))
         }
     }
@@ -738,14 +862,33 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?, small: Bool
             }
             d.espOn && cfg.hasFx && segOf[idx] < Cfg.MAX_SEG && mode != Mode.BRAKE && cfg.segRgb(segOf[idx]).any { it > 0 } ->
                 cfg.segRgb(segOf[idx]).let { Color(it[0] / 255f * 0.6f, it[1] / 255f * 0.6f, it[2] / 255f * 0.6f) }
+            (s.role == Role.PEDAL_R || s.role == Role.PEDAL_L) && turn == 0 && mode != Mode.WARN ->
+                cfg.pedalRgb.let { Color(it[0] / 255f, it[1] / 255f, it[2] / 255f) }
             else -> simColor(s.role, jOf[idx], s.count, mode, turn, t)
         }
     }
     if (d.kind == DevKind.WHEEL) {
-        Canvas(Modifier.fillMaxWidth().aspectRatio(1.25f).padding(vertical = 4.dp)) {
-            val pts = wheelLayout(segs, size)
-            drawWheelBody(size)
-            for (idx in 0 until total) pts.getOrNull(idx)?.let { led(it, colorAt(idx), if (segOf[idx] == sel) 1.5f else 1f) }
+        // Шмель по фото владельца (420x420), ленты по его отметкам: торцы спереди и сзади, контур педали
+        val img = ImageBitmap.imageResource(com.cooper.wheellog.R.drawable.shmel_bok)
+        val groups = listOf(
+            listOf(Role.DRL_L, Role.DRL_R) to (floatArrayOf(98.0f,98.0f,98.0f,98.0f,98.0f,98.0f,98.0f,98.0f,98.0f) to floatArrayOf(48.0f,63.2f,78.5f,93.8f,109.0f,124.2f,139.5f,154.8f,170.0f)),
+            listOf(Role.TAIL_L, Role.TAIL_R) to (floatArrayOf(339.0f,339.0f,339.0f,339.0f,339.0f,339.0f,339.0f,339.0f,339.0f) to floatArrayOf(48.0f,62.6f,77.2f,91.9f,106.5f,121.1f,135.8f,150.4f,165.0f)),
+            listOf(Role.PEDAL_L, Role.PEDAL_R) to (floatArrayOf(130.0f,131.8f,133.7f,140.2f,149.7f,166.1f,182.7f,199.4f,216.1f,232.9f,249.6f,266.3f,283.0f,299.4f,312.6f,318.2f,319.1f,320.0f) to floatArrayOf(276.0f,259.4f,242.8f,227.5f,215.2f,211.8f,210.8f,210.5f,210.2f,210.0f,209.7f,209.4f,209.1f,211.4f,219.2f,234.6f,251.3f,268.0f)))
+        Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxWidth(if (small) 0.62f else 1f).heightIn(max = if (small) 220.dp else 360.dp).aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
+            drawImage(img, IntOffset.Zero, IntSize(img.width, img.height), IntOffset.Zero, IntSize(size.width.toInt(), size.height.toInt()))
+            drawRect(Color.Black.copy(alpha = 0.12f))
+            val k = size.width / 420f
+            for ((roles, xy) in groups) {
+                // точки этой группы берут цвет у сегментов с её ролями, по порядку
+                val idxs = (0 until total).filter { segs[segOf[it]].role in roles }
+                val n = xy.first.size
+                for (q in 0 until n) {
+                    val c = if (idxs.isEmpty()) Color(0xFF262F3E) else colorAt(idxs[q * idxs.size / n])
+                    led(Offset(xy.first[q] * k, xy.second[q] * k), c, 0.7f)
+                }
+            }
+        }
         }
         return
     }

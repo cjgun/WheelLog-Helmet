@@ -42,20 +42,23 @@ object HelmetViews {
     val FF_BACK = View(R.drawable.shlem_ff_zad, 325, 380, listOf(
             Line(floatArrayOf(33f,50.8f,68.6f,86.4f,104.2f,122f,139.8f,157.6f,175.4f,193.2f,211f,228.8f,246.6f,264.4f,282.2f,300f),
                 floatArrayOf(318.3f,325.2f,331.1f,335.9f,339.7f,342.4f,344.1f,344.7f,344.3f,342.8f,340.3f,336.8f,332.2f,326.5f,319.8f,312.1f), 0.65f, 0.35f)))
+    // по отметкам владельца 26.10: лента наклеена выше кромки, сзади дугой
     val MX_SIDE = View(R.drawable.shlem_mx_levyj, 480, 375, listOf(
-            Line(floatArrayOf(30f,42f,54f,66f,78f,90f,102f,114f,126f,138f,150f,162f,174f,186f,198f,210f,222f,234f,246f,258f,270f,282f,294f,306f,318f,330f,342f,354f,366f,378f,384f),
-                floatArrayOf(348.9f,347.5f,343.2f,338.5f,334.6f,330.8f,327f,323.2f,319.4f,316f,312.5f,309.1f,306.1f,303.9f,304.5f,306.7f,308.7f,311f,313.3f,315.8f,318.2f,320.9f,323.9f,326.4f,328.7f,330.8f,333.3f,335.8f,338.2f,340f,340.3f), 0.95f, 0.58f)))
+            Line(floatArrayOf(61f,110f,167f,240f,311f,389f,467f),
+                floatArrayOf(274f,262f,252f,236f,224f,217f,219f), 0.95f, 0.58f)))
+    // по отметкам владельца 26.10: лента наклеена выше кромки, сзади дугой
     val MX_SIDE2 = View(R.drawable.shlem_mx_pravyj, 380, 375, listOf(
-            Line(floatArrayOf(102f,114f,126f,138f,150f,162f,174f,186f,198f,210f,222f,234f,246f,258f,270f,282f,294f,306f,318f),
-                floatArrayOf(322.5f,321f,320f,318f,316f,314f,312f,309f,307f,305f,303f,300.5f,298.5f,302.5f,309.5f,316f,324f,331f,339.5f), 0.42f, 0.05f)))
+            Line(floatArrayOf(2f,60f,118f,180f,235f,275f,299f,320f,335f),
+                floatArrayOf(205f,206f,208f,212f,219f,230f,241f,270f,318f), 0.42f, 0.05f)))
     val MX_FRONT = View(R.drawable.shlem_mx_pered, 300, 395, listOf(
             Line(floatArrayOf(18f,30f,42f,54f,66f,78f,90f,102f,114f,126f),
                 floatArrayOf(301.5f,309.7f,318.7f,326.1f,333.2f,340.4f,348f,356.7f,366.2f,372.1f), 0.15f, 0.0f),
             Line(floatArrayOf(177f,189f,201f,213f,225f,237f,249f,261f,273f,279f),
                 floatArrayOf(372.2f,364.3f,354.3f,345.4f,337.7f,330.4f,322.6f,314.2f,304.6f,301.5f), 1.0f, 0.85f)))
+    // по отметкам владельца 26.10: лента наклеена выше кромки, сзади дугой
     val MX_BACK = View(R.drawable.shlem_mx_zad, 290, 395, listOf(
-            Line(floatArrayOf(17f,33.3f,49.7f,66f,82.3f,98.7f,115f,131.3f,147.7f,164f,180.3f,196.7f,213f,229.3f,245.7f,262f),
-                floatArrayOf(349.6f,343.3f,338f,333.5f,329.9f,327.3f,325.5f,324.7f,324.7f,325.6f,327.4f,330.2f,333.8f,338.3f,343.7f,350.1f), 0.65f, 0.35f)))
+            Line(floatArrayOf(8f,2f,6f,22f,57f,100f,140f,180f,216f,257f,274f,278f,271f),
+                floatArrayOf(336f,290f,255f,221f,208f,196f,190f,193f,201f,225f,250f,290f,336f), 0.65f, 0.35f)))
 
     /** Виды по порядку на экране: левый бок, правый бок, перед, зад. */
     fun forHelmet(mx: Boolean) = if (mx) listOf(MX_SIDE, MX_SIDE2, MX_FRONT, MX_BACK) else listOf(FF_SIDE, FF_SIDE2, FF_FRONT, FF_BACK)
