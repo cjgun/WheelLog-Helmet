@@ -490,8 +490,12 @@ static void ringLayout() {
     for (int s = 0; s < cfg.nseg; s++) {
       if (cfg.seg[s].role != r) continue;
       uint16_t a = segStart(s), n = cfg.seg[s].count;
+      // SEG_REV - точки сегмента идут от затылка ко лбу (так и задумано для бега поворота). Кольцо слева идёт
+      // от затылка ко лбу, справа ото лба к затылку: левый сегмент с SEG_REV по кольцу прямой, без него - обратный.
+      bool left = r == R_SIDE_L || r == R_FRONT_L;
+      bool flip = ((cfg.seg[s].flags & SEG_REV) != 0) != left;
       for (int j = 0; j < n; j++) {
-        int q = (cfg.seg[s].flags & SEG_REV) ? n - 1 - j : j;
+        int q = flip ? n - 1 - j : j;
         float u = (gap / 2 + span * (k + q + 0.5f) / tot) / 360.0f;
         ringD[a + j] = u <= 0.5f ? u * 2 : (1 - u) * 2;
       }
@@ -647,6 +651,7 @@ static void draw(uint32_t now) {
       uint16_t a = segStart(s), cnt = cfg.seg[s].count;
       const uint8_t *sc = cfg.seg_rgb[s];
       bool own = sc[0] | sc[1] | sc[2];  // свой цвет габарита сегмента
+      bool dark = sc[0] == 1 && sc[1] == 1 && sc[2] == 1;  // свой цвет «чёрный»: сегмент в габарите не горит
       for (int j = 0; j < cnt; j++) {
         int i = a + j;
         if (fxOn && ringD[i] >= 0) { fxPixel(i, now, fv, facc); continue; }
@@ -684,7 +689,8 @@ static void draw(uint32_t now) {
         }
         // свой цвет сегмента вместо цвета роли - в габарите; стоп, разгон на затылке и заряд на педалях - свои
         if (own && ro != R_OFF && !brake && !(accel && (ro == R_BACK || ro == R_STOP)) && !(park && (ro == R_PEDAL_R || ro == R_PEDAL_L)))
-          pxs(i, sc[0], sc[1], sc[2], (ro == R_DRL_R || ro == R_DRL_L) ? max<uint8_t>(tb, 80) : tb);
+          if (dark) pxs(i, 0, 0, 0, 0);
+          else pxs(i, sc[0], sc[1], sc[2], (ro == R_DRL_R || ro == R_DRL_L) ? max<uint8_t>(tb, 80) : tb);
         // предупреждение колеса: всё, кроме белого спереди, мигает красным и жёлтым
         if (m == M_WARN && ro != R_FRONT_R && ro != R_FRONT_L && ro != R_DRL_R && ro != R_DRL_L && ro != R_OFF)
           pxs(i, 255, warnOn ? 150 : 30, 0, bb);

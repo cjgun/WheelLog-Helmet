@@ -3,6 +3,7 @@ package com.cooper.wheellog.settings
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -327,6 +328,7 @@ private fun segCard(d: LightDevice, link: EspLink?) {
                 val own = if (c.hasFx && i < Cfg.MAX_SEG) c.segRgb(i).takeIf { rgb -> rgb.any { it > 0 } } else null
                 Box(Modifier.size(22.dp)
                     .background(own?.let { Color(it[0], it[1], it[2]) } ?: Color(Role.colors[s.role]), RoundedCornerShape(5.dp))
+                    .then(if (own != null && own.contentEquals(SEG_DARK)) Modifier.border(1.dp, Color.Gray, RoundedCornerShape(5.dp)) else Modifier)
                     .clickable(enabled = c.hasFx) { colorSeg = if (colorSeg == i) -1 else i })
                 Spacer(Modifier.width(8.dp))
                 Text("${i + 1}. ${Role.names[s.role]}" + if (s.rev) " ↺" else "", Modifier.weight(1f))
@@ -339,7 +341,8 @@ private fun segCard(d: LightDevice, link: EspLink?) {
         }
         if (colorSeg in segs.indices && c.hasFx) {
             Text("Свой цвет сегмента ${colorSeg + 1} (горит в габарите; стоп и повороты - как всегда)", Modifier.padding(top = 6.dp))
-            colorPicker(c.segRgb(colorSeg), allowNone = true) { rgb -> put2 { setSegRgb(colorSeg, rgb) } }
+            val cur = c.segRgb(colorSeg).let { if (it.contentEquals(SEG_DARK)) intArrayOf(0, 0, 0) else it }
+            colorPicker(cur, allowNone = true) { rgb -> put2 { setSegRgb(colorSeg, if (rgb.isEmpty()) intArrayOf(0, 0, 0) else if (rgb.all { it == 0 }) SEG_DARK else rgb) } }
         } else if (c.hasFx) Text("Нажми цветной квадратик сегмента, чтобы выбрать ему свой цвет.", style = MaterialTheme.typography.bodySmall)
         val s = segs.getOrNull(sel)
         if (s != null) {
@@ -384,22 +387,27 @@ private fun writeRow(d: LightDevice, link: EspLink?, c: Cfg) {
 private val PALETTE = listOf(intArrayOf(255, 0, 0), intArrayOf(255, 90, 0), intArrayOf(255, 160, 0), intArrayOf(255, 230, 0),
     intArrayOf(120, 255, 0), intArrayOf(0, 220, 0), intArrayOf(0, 255, 156), intArrayOf(0, 200, 160), intArrayOf(0, 200, 255),
     intArrayOf(0, 80, 255), intArrayOf(60, 0, 255), intArrayOf(122, 0, 255), intArrayOf(200, 0, 255), intArrayOf(255, 0, 160),
-    intArrayOf(255, 60, 90), intArrayOf(255, 255, 255))
+    intArrayOf(255, 60, 90), intArrayOf(255, 255, 255), intArrayOf(0, 0, 0))
 
-/** Палитра и ползунок оттенка; allowNone - кнопка «цвет роли» (0,0,0). */
+/** Свой цвет сегмента «чёрный» - сегмент в габарите не горит; 0,0,0 у сегмента занято под «цвет роли». */
+private val SEG_DARK = intArrayOf(1, 1, 1)
+
+/** Палитра и ползунок оттенка; allowNone - кнопка «цвет роли» (пустой массив). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun colorPicker(cur: IntArray, allowNone: Boolean = false, onPick: (IntArray) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
         PALETTE.forEach { p ->
             val on = p.contentEquals(cur)
+            val black = p.all { it == 0 }  // чёрный на тёмном фоне - с обводкой
             Box(Modifier.size(30.dp).background(Color(p[0], p[1], p[2]), CircleShape)
+                .then(if (black) Modifier.border(1.dp, Color.Gray, CircleShape) else Modifier)
                 .then(if (on) Modifier.background(Color.Transparent).padding(2.dp) else Modifier)
                 .clickable { onPick(p) }) {
-                if (on) Box(Modifier.align(Alignment.Center).size(10.dp).background(Color.Black, CircleShape))
+                if (on) Box(Modifier.align(Alignment.Center).size(10.dp).background(if (black) Color.White else Color.Black, CircleShape))
             }
         }
-        if (allowNone) OutlinedButton(onClick = { onPick(intArrayOf(0, 0, 0)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("Цвет роли") }
+        if (allowNone) OutlinedButton(onClick = { onPick(IntArray(0)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("Цвет роли") }
     }
     var hue by remember { mutableFloatStateOf(0f) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -633,8 +641,11 @@ private fun helmetU(segs: List<Seg>): FloatArray {
     var k = 0
     for (role in listOf(-1) + RING) segs.forEachIndexed { si, s ->
         if (s.role != role) return@forEachIndexed
+        // rev - точки идут от затылка ко лбу (бег поворота). Кольцо слева идёт от затылка ко лбу, справа ото лба
+        // к затылку: левый сегмент с rev по кольцу прямой, без rev - обратный. Как ringLayout() в прошивке.
+        val flip = s.rev != (role == Role.SIDE_L || role == Role.FRONT_L)
         for (i in 0 until s.count) {
-            val q = if (s.rev) s.count - 1 - i else i
+            val q = if (flip) s.count - 1 - i else i
             out[starts[si] + i] = (gap / 2 + span * (k + q + 0.5f) / tot) / 360f
         }
         k += s.count
