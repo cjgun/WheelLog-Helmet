@@ -69,7 +69,7 @@ private fun LightTab() {
     BackHandler(enabled = entry?.destination?.route == "dev") { nav.popBackStack() }
     NavHost(nav, startDestination = "list") {
         composable("list") { lightingScreen(onOpen = { nav.navigate("dev") }) }
-        composable("dev") { Column { CjSubHeader("Устройство") { nav.popBackStack() }; lightDeviceScreen() } }
+        composable("dev") { Column { if (com.cooper.wheellog.settings.devSection.value.isEmpty()) CjSubHeader("Свет") { nav.popBackStack() }; lightDeviceScreen() } }
     }
 }
 

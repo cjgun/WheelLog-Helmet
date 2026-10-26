@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.clip
 import com.cooper.wheellog.helmet.*
 import kotlinx.coroutines.delay
 import kotlin.math.max
@@ -56,15 +58,15 @@ fun lightingScreen(onOpen: (String) -> Unit) {
             if (Lighting.selected.value.isEmpty()) Lighting.selected.value = Lighting.devices.firstOrNull()?.id ?: ""
             Row(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(8.dp)) {
-                    hubPart { Lighting.selected.value = it }
+                    hubPart { Lighting.selected.value = it; devSection.value = "" }
                 }
                 Column(Modifier.weight(1.3f).verticalScroll(rememberScrollState()).padding(8.dp)) {
                     if (Lighting.device(Lighting.selected.value) != null) devicePart(Lighting.selected.value, wide = true)
                 }
             }
         } else {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
-                hubPart { Lighting.selected.value = it; onOpen(it) }
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
+                hubPart { Lighting.selected.value = it; devSection.value = ""; onOpen(it) }
             }
         }
     }
@@ -74,7 +76,7 @@ fun lightingScreen(onOpen: (String) -> Unit) {
 @Composable
 fun lightDeviceScreen() {
     val id = Lighting.selected.value
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
         if (Lighting.device(id) != null) devicePart(id, wide = false) else Text("Устройство удалено", Modifier.padding(16.dp))
     }
 }
@@ -84,21 +86,23 @@ private fun hubPart(open: (String) -> Unit) {
     val enabled by Lighting.enabled
     val mode by Lighting.mode
     val turn by Lighting.turn
-    card("Подсветка") {
-        switchRow("Включена", enabled) { Lighting.setEnabled(it) }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-            Box(Modifier.size(14.dp).background(MODE_COLOR[mode] ?: Color.Gray, CircleShape))
-            Spacer(Modifier.width(8.dp))
-            Text("Режим: ${Mode.names[mode] ?: "?"}" + when (turn) { 1 -> ", поворот налево"; 2 -> ", поворот направо"; 3 -> ", аварийка"; else -> "" },
-                fontWeight = FontWeight.Bold)
-        }
-        Text("Телефон подключается ко всему, где отмечено оборудование. Нажмите устройство, чтобы настроить.",
-            style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp)) {
+        Text("Свет", fontSize = 30.sp, fontWeight = FontWeight(300), modifier = Modifier.weight(1f))
+        Switch(checked = enabled, onCheckedChange = { Lighting.setEnabled(it) })
     }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+        val col = MODE_COLOR[mode] ?: Color.Gray
+        Box(Modifier.size(10.dp).background(col, CircleShape))
+        Text("  " + (Mode.names[mode] ?: "нет данных"), fontSize = 22.sp, fontWeight = FontWeight(300))
+        Text(when (turn) { 1 -> "  · поворот налево"; 2 -> "  · поворот направо"; 3 -> "  · аварийка"; else -> "" }, fontSize = 13.sp, color = MUTE)
+    }
+    HorizontalDivider(color = HAIR)
     Lighting.devices.forEach { d -> deviceRow(d, open) }
-    Row(Modifier.padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { open(Lighting.add(DevKind.HELMET_FF)) }) { Text("+ Шлем") }
-        if (Lighting.devices.none { it.kind == DevKind.WHEEL }) OutlinedButton(onClick = { open(Lighting.add(DevKind.WHEEL)) }) { Text("+ Колесо") }
+    Row(Modifier.padding(vertical = 4.dp)) {
+        Text("+ Шлем", color = ACC, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable { open(Lighting.add(DevKind.HELMET_FF)) }.padding(vertical = 12.dp, horizontal = 4.dp))
+        if (Lighting.devices.none { it.kind == DevKind.WHEEL }) Text("+ Колесо", color = ACC, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable { open(Lighting.add(DevKind.WHEEL)) }.padding(vertical = 12.dp, horizontal = 12.dp))
     }
     testCard()
 }
@@ -106,50 +110,51 @@ private fun hubPart(open: (String) -> Unit) {
 @Composable
 private fun deviceRow(d: LightDevice, open: (String) -> Unit) {
     val linkOn = (Lighting.esp[d.id]?.linked == true) || (Lighting.zg[d.id]?.linked == true)
-    val st = listOfNotNull(Lighting.esp[d.id]?.let { "плата: " + it.status.value }, Lighting.zg[d.id]?.let { "ZENGGE: " + it.status.value })
-        .joinToString(" · ").ifEmpty { if (d.espOn || d.zgOn) "оборудование не выбрано: нажмите и найдите" else "без оборудования" }
     Lighting.frameTick.intValue  // перерисовать при смене связи
-    Surface(shape = RoundedCornerShape(12.dp),
-        color = if (Lighting.selected.value == d.id) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { open(d.id) }) {
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (d.isHelmet) Image(painterResource(HelmetViews.forHelmet(d.kind == DevKind.HELMET_MX)[0].res), null,
-                Modifier.size(64.dp, 52.dp).background(Color.Black, RoundedCornerShape(8.dp)), contentScale = ContentScale.Fit)
-            else Canvas(Modifier.size(64.dp, 52.dp)) { silhouette(d.kind, MaterialTheme_onSurface) }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(d.name, fontWeight = FontWeight.Bold)
-                Text(d.kind.title, style = MaterialTheme.typography.bodySmall)
-                Text(st, style = MaterialTheme.typography.bodySmall, color = if (linkOn) Color(0xFF66BB6A) else MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (d.espOn) tag("плата CJ")
-                    if (d.zgOn) tag("ZENGGE")
-                    if (!d.espOn && !d.zgOn) tag("без оборудования")
-                }
-            }
-            Box(Modifier.size(12.dp).background(if (linkOn) Color(0xFF43A047) else Color.Gray, CircleShape))
-        }
+    val c = d.cfgObj()
+    val what = when {
+        !d.espOn && !d.zgOn -> "без оборудования"
+        d.isHelmet && d.espOn && c.hasFx -> Fx.names.getOrElse(c.fx) { "" } + if (c.hasStopFx) " · стоп " + Stop.names.getOrElse(c.stopMode) { "" }.lowercase() else ""
+        d.isHelmet -> if (d.zgOn && !d.espOn) "ZENGGE" else "плата CJ"
+        else -> "ходовые, габариты, педали, обод"
     }
+    val sel = Lighting.selected.value == d.id
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()
+        .background(if (sel) Color(0x0DFFFFFF) else Color.Transparent).clickable { open(d.id) }.padding(vertical = 10.dp)) {
+        if (d.isHelmet) Image(painterResource(HelmetViews.forHelmet(d.kind == DevKind.HELMET_MX)[0].res), null,
+            Modifier.size(96.dp, 66.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black), contentScale = ContentScale.Crop)
+        else Image(painterResource(com.cooper.wheellog.R.drawable.shmel_bok), null,
+            Modifier.size(96.dp, 66.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black), contentScale = ContentScale.Crop)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(d.name, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            Text(what, fontSize = 12.5.sp, color = MUTE, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 3.dp)) {
+                Box(Modifier.size(6.dp).background(if (linkOn) Color(0xFF4FD18B) else Color(0xFF3A3F46), CircleShape))
+                Text(if (linkOn) "  НА СВЯЗИ" else if (d.espOn || d.zgOn) "  НЕТ СВЯЗИ" else "  НЕ НАСТРОЕНО", fontSize = 10.5.sp,
+                    letterSpacing = 1.4.sp, color = MUTE, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Text("›", fontSize = 20.sp, color = Color(0xFF4A5059))
+    }
+    HorizontalDivider(color = HAIR)
 }
 
 private val MaterialTheme_onSurface = Color(0xFFCFD8E6)
 
-@Composable
-private fun tag(s: String) {
-    Text(s, style = MaterialTheme.typography.labelSmall, modifier = Modifier
-        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 2.dp))
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun testCard() {
-    card("Проверка") {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            TESTS.forEach { (w, n) -> OutlinedButton(onClick = { Lighting.test(w) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text(n) } }
-            TextButton(onClick = { Lighting.test(0) }) { Text("Стоп проверки") }
+    card("Проверка на всех сразу") {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
+            TESTS.forEach { (w, n) ->
+                Text(n, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.border(1.dp, HAIR, RoundedCornerShape(50))
+                    .clip(RoundedCornerShape(50)).clickable { Lighting.test(w) }.padding(horizontal = 13.dp, vertical = 9.dp))
+            }
+            Text("Стоп проверки", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = ACC,
+                modifier = Modifier.clip(RoundedCornerShape(50)).clickable { Lighting.test(0) }.padding(horizontal = 13.dp, vertical = 9.dp))
         }
-        Text("5 секунд на всех платах и ZENGGE сразу. Плата не включает проверку, если колесо едет быстрее 3 км/ч.",
-            style = MaterialTheme.typography.bodySmall)
+        Text("5 секунд на всех платах и ZENGGE сразу. Плата не включает проверку, если колесо едет быстрее 3 км/ч.", fontSize = 12.sp, color = MUTE)
     }
 }
 
@@ -169,53 +174,161 @@ private fun devicePart(id: String, wide: Boolean) {
     }
     if (edits[id] == null) edits[id] = d.cfgObj().b
 
-    card(d.name) {
-        picture(d, link, zl)
-        val m = link?.mode?.intValue ?: if (zl != null) Lighting.mode.intValue else -1
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(12.dp).background(MODE_COLOR[m] ?: Color.Gray, CircleShape))
-            Spacer(Modifier.width(6.dp))
-            Text(Mode.names[m] ?: "?", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (link != null) Text("лента ${link.ma.intValue} мА", style = MaterialTheme.typography.bodySmall)
+    val sec = devSection.value
+    if (sec.isNotEmpty()) androidx.activity.compose.BackHandler { devSection.value = "" }
+    Column(Modifier.fillMaxWidth()) {
+        if (sec.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+            Text("‹", fontSize = 26.sp, color = MUTE, modifier = Modifier.clickable { devSection.value = "" }.padding(end = 14.dp))
+            Text(SECTIONS[sec] ?: "", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        } else Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+            Text(d.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            val on = link?.linked == true || zl?.linked == true
+            Box(Modifier.size(7.dp).background(if (on) Color(0xFF4FD18B) else Color(0xFF3A3F46), CircleShape))
+            Text(if (on) "  НА СВЯЗИ" else "  НЕТ СВЯЗИ", fontSize = 10.5.sp, letterSpacing = 1.4.sp, color = MUTE, fontWeight = FontWeight.SemiBold)
         }
-        var name by remember(id) { mutableStateOf(d.name) }
-        OutlinedTextField(name, { name = it.take(30); Lighting.rename(id, name) },
-            label = { Text("Название (впишите свою модель)") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+        picture(d, link, zl, small = sec.isNotEmpty(), quad = wide)
+        val m = link?.mode?.intValue ?: if (zl != null) Lighting.mode.intValue else -1
+        if (sec.isEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+                Box(Modifier.size(9.dp).background(MODE_COLOR[m] ?: Color.Gray, CircleShape))
+                Text("  " + (Mode.names[m] ?: "?"), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                if (link != null) Text("лента ${link.ma.intValue} мА", fontSize = 12.sp, color = MUTE)
+            }
+            quickTests()
+            sectionList(d)
+        }
+    }
+    when (sec) {
+        "fx" -> fxCard(d, link)
+        "tape" -> segCard(d, link)
+        "stop" -> stopSection(d)
+        "bright" -> brightSection(d)
+        "pedals" -> pedalSection(d)
+        "rim" -> rimSection(d)
+        "conn" -> connSection(d)
+        "board" -> { nameAndKind(d); equipCard(d); boardCard(d, link) }
+        "zg" -> zenggeCard(d, zl)
+        "local" -> thresholdsLocal(d)
+    }
+    if (d.espOn && sec.isNotEmpty() && sec !in listOf("board", "zg", "local")) writeBar(d, link)
+    Spacer(Modifier.height(24.dp))
+}
+
+/** Вид шлема на экране устройства (бок, бок справа, перед, зад). */
+private val heroView = mutableIntStateOf(0)
+
+/** Какой раздел устройства открыт (пусто - список разделов). */
+val devSection = mutableStateOf("")
+
+private val SECTIONS = mapOf("fx" to "Эффект", "tape" to "Лента и цвета", "stop" to "Стоп и сигналы", "bright" to "Яркость и ток",
+    "pedals" to "Педали", "rim" to "Обод", "conn" to "Связь", "board" to "Плата", "zg" to "ZENGGE", "local" to "Когда стоп")
+
+@Composable
+private fun sectionList(d: LightDevice) {
+    val c = Cfg(edits[d.id] ?: d.cfgObj().b)
+    val items = buildList {
+        if (d.espOn && d.isHelmet) add("fx" to (if (c.hasFx) Fx.names.getOrElse(c.fx) { "" } else "после обновления прошивки"))
+        if (d.espOn) add("tape" to "${c.segs.size} сегм. · ${c.segs.sumOf { it.count }} точек")
+        if (d.espOn) add("stop" to (if (c.hasStopFx) Stop.names.getOrElse(c.stopMode) { "" }.lowercase() else "пороги стопа"))
+        if (d.espOn) add("bright" to "габарит ${c.brightTail} · ${c.limitMa} мА")
+        if (d.espOn && !d.isHelmet) add("pedals" to "цвет · заряд на стоянке")
+        if (d.espOn && !d.isHelmet) add("rim" to "мигание, гасить на стоянке")
+        if (d.espOn) add("conn" to if (d.isHelmet) "ESP-NOW с колесом" else "по проводу, от шлема")
+        if (d.zgOn) add("zg" to "вся лента целиком")
+        if (!d.espOn && d.zgOn) add("local" to "считает телефон")
+        add("board" to (if (d.espOn) "имя, прошивка, оборудование" else "оборудование"))
+    }
+    Column(Modifier.padding(top = 4.dp)) {
+        HorizontalDivider(color = HAIR)
+        items.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                row.forEachIndexed { k, (id, sub) ->
+                    if (k == 1) Box(Modifier.width(1.dp).fillMaxHeight().background(HAIR))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).clickable { devSection.value = id }
+                        .padding(start = if (k == 0) 2.dp else 12.dp, end = 6.dp, top = 14.dp, bottom = 14.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(SECTIONS[id] ?: id, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                            Text(sub, fontSize = 11.5.sp, color = MUTE, maxLines = 1)
+                        }
+                        Text("›", fontSize = 18.sp, color = Color(0xFF4A5059))
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+            HorizontalDivider(color = HAIR)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun quickTests() {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(2 to "Стоп", 4 to "← Поворот", 5 to "Поворот →", 6 to "Аварийка").forEach { (w, n) ->
+            Text(n, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.weight(1f).border(1.dp, HAIR, RoundedCornerShape(50)).clip(RoundedCornerShape(50))
+                    .clickable { Lighting.test(w) }.padding(vertical = 10.dp))
+        }
+    }
+}
+
+@Composable
+private fun nameAndKind(d: LightDevice) {
+    card("Устройство") {
+        var name by remember(d.id) { mutableStateOf(d.name) }
+        OutlinedTextField(name, { name = it.take(30); Lighting.rename(d.id, name) },
+            label = { Text("Название (впишите свою модель)") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
         if (d.isHelmet) {
-            Text("Вид", Modifier.padding(top = 6.dp))
+            Text("Вид шлема", fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
             chips(listOf(DevKind.HELMET_FF.title, DevKind.HELMET_MX.title), if (d.kind == DevKind.HELMET_MX) 1 else 0) { i ->
                 val k = if (i == 1) DevKind.HELMET_MX else DevKind.HELMET_FF
-                Lighting.update(id) { it.copy(kind = k) }
+                Lighting.update(d.id) { it.copy(kind = k) }
                 // сменили вид - правка сегментов начинается с шаблона этого вида (на плату уйдёт по «Записать»)
-                edits[id] = Cfg(edits[id] ?: d.cfgObj().b).copy { segs = Cfg.forKind(k).segs }.b
+                edits[d.id] = Cfg(edits[d.id] ?: d.cfgObj().b).copy { segs = Cfg.forKind(k).segs }.b
             }
         }
     }
+}
+
+@Composable
+private fun equipCard(d: LightDevice) {
+    val id = d.id
     card("Оборудование") {
-        checkRow("Плата CJ", if (d.isHelmet) "ESP32 с лентой по сегментам: стоп, повороты, габарит, проверка" else "ESP32-C3 в корпусе: ходовые, габариты, педали, обод", d.espOn) { on ->
+        checkRow("Плата CJ", if (d.isHelmet) "ESP32 с лентой по сегментам: стоп, повороты, габарит, проверка" else "ESP32 в корпусе: ходовые, габариты, педали, обод", d.espOn) { on ->
             Lighting.update(id) { it.copy(espOn = on) }
         }
         if (d.isHelmet) checkRow("Контроллер ZENGGE", "вся лента целиком: свой эффект, вспышка стопа, повороты", d.zgOn) { on ->
             Lighting.update(id) { it.copy(zgOn = on) }
         }
         var ask by remember(id) { mutableStateOf(false) }
-        TextButton(onClick = { ask = true }) { Text("Удалить устройство", color = MaterialTheme.colorScheme.error) }
+        actionRow("Удалить устройство", "настройки на самой плате останутся", danger = true) { ask = true }
         if (ask) AlertDialog(onDismissRequest = { ask = false },
             title = { Text("Удалить «${d.name}»?") },
             text = { Text("Устройство пропадёт из списка вместе с его настройками в приложении. Настройки на самой плате останутся.") },
-            confirmButton = { TextButton(onClick = { ask = false; Lighting.remove(id); Lighting.selected.value = "" }) { Text("Удалить") } },
+            confirmButton = { TextButton(onClick = { ask = false; devSection.value = ""; Lighting.remove(id); Lighting.selected.value = "" }) { Text("Удалить") } },
             dismissButton = { TextButton(onClick = { ask = false }) { Text("Отмена") } })
     }
-    if (d.espOn) {
-        boardCard(d, link)
-        segCard(d, link)
-        if (d.isHelmet) fxCard(d, link)
-        settingsCards(d, link)
+}
+
+/** Одна кнопка записи: видна, когда правки отличаются от того, что в плате. */
+@Composable
+private fun writeBar(d: LightDevice, link: EspLink?) {
+    val raw = edits[d.id] ?: return
+    val c = Cfg(raw)
+    val board = link?.config?.value?.takeIf { Cfg.isBoardCfg(it) }
+    val dirty = board == null || !Cfg(board).b.contentEquals(c.b)
+    val okSegs = c.segs.isNotEmpty() && c.segs.sumOf { it.count } in 1..300
+    if (!dirty) return
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 14.dp)
+        .background(ACC, RoundedCornerShape(16.dp)).padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(if (d.isHelmet) "Записать в шлем" else "Записать в колесо", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A0D00))
+            Text(if (link?.linked == true) "есть изменения" else "плата не на связи", fontSize = 12.sp, color = Color(0xB31A0D00))
+        }
+        TextButton(onClick = { edits[d.id] = (board ?: d.cfgObj().b).copyOf() }) { Text("Отменить", color = Color(0xFF1A0D00)) }
+        Button(onClick = { link?.writeConfig(c.forBoard()) }, enabled = okSegs && link?.linked == true,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A0D00), contentColor = ACC)) { Text("Записать") }
     }
-    if (d.zgOn) zenggeCard(d, zl)
-    if (!d.espOn && d.zgOn) thresholdsLocal(d)
-    if (!wide) testCard()
-    Spacer(Modifier.height(24.dp))
 }
 
 @Composable
@@ -362,7 +475,6 @@ private fun segCard(d: LightDevice, link: EspLink?) {
         }
         Text("Всего ${segs.sumOf { it.count }} точек", style = MaterialTheme.typography.bodySmall)
         c.problem()?.let { Text(it, color = Color(0xFFFFB300), modifier = Modifier.padding(top = 4.dp)) }
-        writeRow(d, link, c)
     }
 }
 
@@ -448,62 +560,94 @@ private fun fxCard(d: LightDevice, link: EspLink?) {
         }
         Text("Стоп, повороты и предупреждения колеса всегда поверх эффекта. На картинке эффект показан на 15 км/ч.",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-        writeRow(d, link, c)
     }
 }
 
-// ---------- настройки платы ----------
+// ---------- настройки платы: разделы ----------
 @Composable
-private fun settingsCards(d: LightDevice, link: EspLink?) {
-    val raw = edits[d.id] ?: return
-    val c = Cfg(raw)
-    if (!c.ok) return
+private fun cfgOf(d: LightDevice): Cfg? = edits[d.id]?.let { Cfg(it) }?.takeIf { it.ok }
+
+@Composable
+private fun stopSection(d: LightDevice) {
+    val c = cfgOf(d) ?: return
     fun upd(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
-    key(raw.hex()) {
-        card("Когда стоп и разгон") {
-            thresholdSliders(c) { f -> upd(f) }
-            if (c.hasStopFx) {
-                Text("Как моргает стоп", Modifier.padding(top = 8.dp), fontWeight = FontWeight.Bold)
-                chips(Stop.names, c.stopMode) { i -> upd { stopMode = i } }
-                Text(Stop.hints.getOrElse(c.stopMode) { "" }, style = MaterialTheme.typography.bodySmall)
-                if (c.stopMode != Stop.STEADY) {
-                    Text("Что моргает", Modifier.padding(top = 6.dp))
-                    chips(Stop.zones, c.stopZone) { i -> upd { stopZone = i } }
-                    slider("Частота вспышек, Гц", c.stopHz2 / 2f, 1f, 10f, 0.5f, "%.1f") { v -> upd { stopHz2 = (v * 2).roundToInt() } }
-                }
-                if (c.stopMode == Stop.HARD) slider("Резкое торможение, км/ч в секунду", c.stopHard.toFloat(), 5f, 25f, 1f, "%.0f",
-                    "или наклон назад вдвое сильнее порога стопа") { v -> upd { stopHard = v.roundToInt() } }
-            } else Text("Мигающий стоп появится после обновления прошивки платы.", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall)
+    key(c.b.hex()) {
+        if (c.hasStopFx) card("Как моргает стоп") {
+            chips(Stop.names, c.stopMode) { i -> upd { stopMode = i } }
+            Text(Stop.hints.getOrElse(c.stopMode) { "" }, fontSize = 12.sp, color = MUTE)
+            if (c.stopMode != Stop.STEADY) {
+                Text("Что моргает", fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+                chips(Stop.zones, c.stopZone) { i -> upd { stopZone = i } }
+                slider("Частота вспышек, Гц", c.stopHz2 / 2f, 1f, 10f, 0.5f, "%.1f") { v -> upd { stopHz2 = (v * 2).roundToInt() } }
+            }
+            if (c.stopMode == Stop.HARD) slider("Резкое торможение, км/ч в секунду", c.stopHard.toFloat(), 5f, 25f, 1f, "%.0f",
+                "или наклон назад вдвое сильнее порога стопа") { v -> upd { stopHard = v.roundToInt() } }
+        } else card("Как моргает стоп") { Text("Мигающий стоп появится после обновления прошивки платы.", fontSize = 12.sp, color = MUTE) }
+        card("Когда считать стопом") { thresholdSliders(c) { f -> upd(f) } }
+        card("Повороты и предупреждение") {
+            slider("Поворот гаснет через, с", c.turnSec.toFloat(), 1f, 60f, 1f, "%.0f") { v -> upd { turnSec = v.roundToInt() } }
+            slider("Предупреждение от PWM, %", c.warnPwm.toFloat(), 0f, 100f, 5f, "%.0f", "0 - не предупреждать") { v -> upd { warnPwm = v.roundToInt() } }
+            Text("Цвет разгона", fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+            chips(COLORS.map { it.first }, COLORS.indexOfFirst { it.second.contentEquals(c.accelRgb) }) { i -> upd { accelRgb = COLORS[i].second } }
+            if (!d.isHelmet) switchRow("Габариты вспыхивают вместе со стопом", c.flag(Cfg.F_TAIL_BRAKE)) { on -> upd { setFlag(Cfg.F_TAIL_BRAKE, on) } }
         }
-        card("Яркость, цвета, лента") {
+    }
+}
+
+@Composable
+private fun brightSection(d: LightDevice) {
+    val c = cfgOf(d) ?: return
+    fun upd(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
+    key(c.b.hex()) {
+        card("Яркость") {
             slider("Габарит", c.brightTail.toFloat(), 0f, 255f, 5f, "%.0f") { v -> upd { brightTail = v.roundToInt() } }
             slider("Стоп и поворот", c.brightBrake.toFloat(), 0f, 255f, 5f, "%.0f") { v -> upd { brightBrake = v.roundToInt() } }
             slider("Предел тока ленты, мА", c.limitMa.toFloat(), 100f, 6000f, 100f, "%.0f", "от USB платы - не больше 400") { v -> upd { limitMa = v.roundToInt() } }
-            Text("Цвет разгона", Modifier.padding(top = 6.dp))
-            chips(COLORS.map { it.first }, COLORS.indexOfFirst { it.second.contentEquals(c.accelRgb) }) { i -> upd { accelRgb = COLORS[i].second } }
-            if (!d.isHelmet) {
-                Text("Цвет педалей", Modifier.padding(top = 6.dp))
-                chips(COLORS.map { it.first }, COLORS.indexOfFirst { it.second.contentEquals(c.pedalRgb) }) { i -> upd { pedalRgb = COLORS[i].second } }
-            }
-            Text("Тип ленты", Modifier.padding(top = 6.dp))
-            chips(Cfg.STRIPS, c.stripType) { i -> upd { stripType = i } }
-            slider("Поворот гаснет через, с", c.turnSec.toFloat(), 1f, 60f, 1f, "%.0f") { v -> upd { turnSec = v.roundToInt() } }
-            slider("Предупреждение от PWM, %", c.warnPwm.toFloat(), 0f, 100f, 5f, "%.0f", "0 - не предупреждать") { v -> upd { warnPwm = v.roundToInt() } }
             if (d.isHelmet) switchRow("Белый спереди", c.flag(Cfg.F_FRONT_WHITE)) { on -> upd { setFlag(Cfg.F_FRONT_WHITE, on) } }
-            else switchRow("Габариты вспыхивают вместе со стопом", c.flag(Cfg.F_TAIL_BRAKE)) { on -> upd { setFlag(Cfg.F_TAIL_BRAKE, on) } }
+        }
+        card("Лента") {
+            Text("Тип ленты", fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+            chips(Cfg.STRIPS, c.stripType) { i -> upd { stripType = i } }
             switchRow("Режим разметки (каждая 10-я точка)", c.flag(Cfg.F_CALIBRATE)) { on -> upd { setFlag(Cfg.F_CALIBRATE, on) } }
         }
-        if (!d.isHelmet) card("Обод (индукция)") {
+    }
+}
+
+@Composable
+private fun pedalSection(d: LightDevice) {
+    val c = cfgOf(d) ?: return
+    fun upd(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
+    key(c.b.hex()) {
+        card("Цвет педалей") {
+            colorPicker(c.pedalRgb) { rgb -> upd { pedalRgb = rgb } }
+            Text("На стоянке педали показывают заряд колеса зелёной шкалой.", fontSize = 12.sp, color = MUTE, modifier = Modifier.padding(top = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun rimSection(d: LightDevice) {
+    val c = cfgOf(d) ?: return
+    fun upd(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
+    key(c.b.hex()) {
+        card("Обод (индукция)") {
             switchRow("Мигать при предупреждении", c.rim and Cfg.RIM_FLASH_WARN != 0) { on -> upd { rim = if (on) rim or Cfg.RIM_FLASH_WARN else rim and Cfg.RIM_FLASH_WARN.inv() } }
             switchRow("Мигать при торможении", c.rim and Cfg.RIM_FLASH_BRAKE != 0) { on -> upd { rim = if (on) rim or Cfg.RIM_FLASH_BRAKE else rim and Cfg.RIM_FLASH_BRAKE.inv() } }
             switchRow("Гасить на стоянке через 30 с", c.rim and Cfg.RIM_OFF_PARK != 0) { on -> upd { rim = if (on) rim or Cfg.RIM_OFF_PARK else rim and Cfg.RIM_OFF_PARK.inv() } }
-            Text("Кнопка пульта К1 - главный выключатель обода, плата только гасит и мигает.", style = MaterialTheme.typography.bodySmall)
+            Text("Кнопка пульта К1 - главный выключатель обода, плата только гасит и мигает.", fontSize = 12.sp, color = MUTE, modifier = Modifier.padding(top = 6.dp))
         }
-        card("Связь шлем - колесо") {
+    }
+}
+
+@Composable
+private fun connSection(d: LightDevice) {
+    val c = cfgOf(d) ?: return
+    fun upd(f: Cfg.() -> Unit) { edits[d.id] = c.copy(f).b }
+    key(c.b.hex()) {
+        card("Шлем и колесо") {
             if (d.isHelmet) switchRow("Пересылать режим колесу (ESP-NOW)", c.relay and Cfg.RELAY_SEND != 0) { on -> upd { relay = if (on) relay or Cfg.RELAY_SEND else relay and Cfg.RELAY_SEND.inv() } }
             else switchRow("Брать режим у шлема, если телефон не на связи", c.relay and Cfg.RELAY_RECV != 0) { on -> upd { relay = if (on) relay or Cfg.RELAY_RECV else relay and Cfg.RELAY_RECV.inv() } }
-            Text("Так колесо горит синхронно со шлемом и без своей связи с телефоном.", style = MaterialTheme.typography.bodySmall)
-            writeRow(d, link, c)
+            Text("Так колесо горит синхронно со шлемом и без своей связи с телефоном.", fontSize = 12.sp, color = MUTE, modifier = Modifier.padding(top = 6.dp))
         }
     }
 }
@@ -564,7 +708,7 @@ private fun zenggeCard(d: LightDevice, zl: ZenggeLink?) {
 
 /** Шлем на картинках (четыре вида) или колесо сверху, точки по сегментам; цвета - кадр с платы или расчёт. */
 @Composable
-private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
+private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?, small: Boolean = false, quad: Boolean = false) {
     Lighting.frameTick.intValue
     var t by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) { while (true) { delay(50); t = System.currentTimeMillis() } }
@@ -606,6 +750,37 @@ private fun picture(d: LightDevice, link: EspLink?, zl: ZenggeLink?) {
         return
     }
     val views = HelmetViews.forHelmet(d.kind == DevKind.HELMET_MX)
+    @Composable
+    fun one(vi: Int, mod: Modifier) {
+        val v = views[vi]
+        val img = ImageBitmap.imageResource(v.res)
+        Canvas(mod.aspectRatio(v.w.toFloat() / v.h).clip(RoundedCornerShape(14.dp)).background(Color.Black)) {
+            val k = size.width / v.w
+            drawImage(img, IntOffset.Zero, IntSize(img.width, img.height), IntOffset.Zero, IntSize(size.width.toInt(), size.height.toInt()))
+            drawRect(Color.Black.copy(alpha = 0.35f))
+            for (idx in 0 until total) {
+                val u = us[idx]
+                if (u < 0f) continue
+                for (ln in v.lines) ln.at(u)?.let { (x, y) -> led(Offset(x * k, y * k), colorAt(idx), if (segOf[idx] == sel) 1.6f else 1f) }
+            }
+        }
+    }
+    if (!quad) {
+        var vi by heroView
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            one(vi, Modifier.fillMaxWidth(if (small) 0.62f else 1f).heightIn(max = if (small) 200.dp else 320.dp))
+            Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                HelmetViews.titles.forEachIndexed { i, s ->
+                    val on = i == vi
+                    Column(Modifier.clickable { vi = i }.padding(horizontal = 8.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(s.uppercase(), fontSize = 10.5.sp, letterSpacing = 1.4.sp, fontWeight = FontWeight.SemiBold, color = if (on) Color(0xFFEEF0F2) else MUTE)
+                        Box(Modifier.padding(top = 4.dp).height(2.dp).width(28.dp).background(if (on) ACC else Color.Transparent))
+                    }
+                }
+            }
+        }
+        return
+    }
     Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (row in 0..1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             for (c in 0..1) {
@@ -743,60 +918,86 @@ private fun zgColor(zl: ZenggeLink?, i: Int, t: Long): Color {
     return Color.hsv(h, 1f, 0.7f)
 }
 
-// ======================= общие элементы =======================
+// ======================= общие элементы (новый дизайн) =======================
 
+private val HAIR = Color(0x12FFFFFF)
+private val MUTE = Color(0xFF7D848E)
+private val ACC = Color(0xFFFF9A2E)
+
+/** Секция без рамки: подпись мелкими буквами и тонкая линия сверху. */
 @Composable
 private fun card(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
-            content()
-        }
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        HorizontalDivider(color = HAIR)
+        Text(title.uppercase(), fontSize = 10.5.sp, letterSpacing = 1.6.sp, color = MUTE, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
+        content()
     }
 }
 
 @Composable
 private fun checkRow(name: String, desc: String, on: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(10.dp)).clickable { onChange(!on) }.padding(8.dp)) {
-        Checkbox(checked = on, onCheckedChange = onChange)
-        Column(Modifier.padding(start = 4.dp, top = 10.dp)) {
-            Text(name, fontWeight = FontWeight.Bold)
-            Text(desc, style = MaterialTheme.typography.bodySmall)
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { onChange(!on) }.padding(vertical = 10.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(desc, fontSize = 12.sp, color = MUTE)
         }
+        Switch(checked = on, onCheckedChange = onChange)
     }
+    HorizontalDivider(color = HAIR)
 }
 
 @Composable
 private fun slider(name: String, value: Float, min: Float, max: Float, step: Float, fmt: String,
                    hint: String = "", onDone: (Float) -> Unit) {
     var v by remember { mutableFloatStateOf(value.coerceIn(min, max)) }
-    Column(Modifier.padding(top = 6.dp)) {
-        Row {
-            Text(name, Modifier.weight(1f))
-            Text(fmt.format(v), fontWeight = FontWeight.Bold)
+    Column(Modifier.padding(top = 10.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(name, Modifier.weight(1f), fontSize = 14.sp)
+            Text(fmt.format(v), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
         // без отметок шагов: на 300 точках они сливаются в полосу; шаг даёт округление
         Slider(value = v, onValueChange = { v = (Math.round(it / step) * step).coerceIn(min, max) },
-            onValueChangeFinished = { onDone(v) }, valueRange = min..maxOf(max, min + step))
-        if (hint.isNotEmpty()) Text(hint, style = MaterialTheme.typography.bodySmall)
+            onValueChangeFinished = { onDone(v) }, valueRange = min..maxOf(max, min + step),
+            colors = SliderDefaults.colors(thumbColor = ACC, activeTrackColor = ACC, inactiveTrackColor = Color(0xFF2A2F36)))
+        if (hint.isNotEmpty()) Text(hint, fontSize = 12.sp, color = MUTE)
     }
+    HorizontalDivider(color = HAIR)
 }
 
 @Composable
 private fun switchRow(name: String, on: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-        Text(name, Modifier.weight(1f))
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { onChange(!on) }.padding(vertical = 6.dp)) {
+        Text(name, Modifier.weight(1f), fontSize = 14.sp)
         Switch(checked = on, onCheckedChange = onChange)
     }
+    HorizontalDivider(color = HAIR)
 }
 
+/** Выбор одного из нескольких: кнопки-сегменты в одной рамке. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun chips(items: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        items.forEachIndexed { i, s -> FilterChip(selected = i == selected, onClick = { onSelect(i) }, label = { Text(s) }) }
+    FlowRow(Modifier.fillMaxWidth().padding(vertical = 6.dp).border(1.dp, HAIR, RoundedCornerShape(12.dp)).padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        items.forEachIndexed { i, s ->
+            val on = i == selected
+            Text(s, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = if (on) ACC else MUTE,
+                modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(if (on) Color(0x24FF9A2E) else Color.Transparent)
+                    .clickable { onSelect(i) }.padding(horizontal = 11.dp, vertical = 8.dp))
+        }
     }
+}
+
+/** Строка-действие со стрелкой; danger - красная. */
+@Composable
+private fun actionRow(name: String, sub: String = "", danger: Boolean = false, onClick: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 13.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = if (danger) Color(0xFFFF6B61) else Color(0xFFEEF0F2))
+            if (sub.isNotEmpty()) Text(sub, fontSize = 11.5.sp, color = MUTE)
+        }
+        Text("›", fontSize = 20.sp, color = Color(0xFF4A5059))
+    }
+    HorizontalDivider(color = HAIR)
 }
