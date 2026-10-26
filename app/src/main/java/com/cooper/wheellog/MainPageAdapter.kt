@@ -94,6 +94,9 @@ class MainPageAdapter(private var pages: MutableList<Int>, val activity: MainAct
         when (pages[position]) {
             R.layout.main_view_main -> {
                 wheelView = view.findViewById(R.id.wheelView)
+                view.findViewById<androidx.compose.ui.platform.ComposeView>(R.id.cjRide)?.setContent {
+                    com.cooper.wheellog.cj.CjTheme { com.cooper.wheellog.cj.RideScreen() }
+                }
             }
             R.layout.main_view_params_list -> {
                 createSecondPage()
