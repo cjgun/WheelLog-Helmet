@@ -24,8 +24,14 @@
         android:visibility="gone"
         android:orientation="horizontal" />
 
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/cj_top"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
+        android:visibility="gone"
         android:minHeight="?attr/actionBarSize"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -51,6 +57,13 @@
         android:layout_weight="1">
     </androidx.viewpager2.widget.ViewPager2>
 
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/cj_tabs"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:visibility="gone" />
+
     <me.relex.circleindicator.CircleIndicator3
         android:id="@+id/indicator"
         android:layout_width="match_parent"
@@ -61,4 +74,9 @@
         app:ci_drawable="@color/accent"
         app:ci_drawable_unselected="@color/wheelview_arc_dim"
         android:layout_gravity = "center_horizontal|bottom" />
+
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/cj_bottom"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
 </LinearLayout>

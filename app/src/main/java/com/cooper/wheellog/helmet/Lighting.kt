@@ -71,6 +71,9 @@ object Lighting {
     val devices = mutableStateListOf<LightDevice>()
     val activeHelmet = mutableStateOf("")
     val enabled = mutableStateOf(true)
+    /** Свет шлемов и колеса по отдельности (значки в шапке главного экрана). */
+    val helmetsOn = mutableStateOf(true)
+    val wheelOn = mutableStateOf(true)
     /** Открытое в настройках устройство. */
     val selected = mutableStateOf("")
     /** Режим для экрана и ZENGGE: с платы шлема или посчитанный телефоном. */
@@ -110,12 +113,14 @@ object Lighting {
         activeHelmet.value = prefs.getString("active", activeHelmet.value) ?: ""
         if (devices.none { it.id == activeHelmet.value }) activeHelmet.value = devices.firstOrNull { it.isHelmet }?.id ?: ""
         enabled.value = prefs.getBoolean("enabled2", true)
+        helmetsOn.value = prefs.getBoolean("helmetsOn", true)
+        wheelOn.value = prefs.getBoolean("wheelOn", true)
     }
 
     private fun save() {
         val a = JSONArray()
         devices.forEach { a.put(it.toJson()) }
-        prefs.edit().putString("devices", a.toString()).putString("active", activeHelmet.value).putBoolean("enabled2", enabled.value).apply()
+        prefs.edit().putString("devices", a.toString()).putString("active", activeHelmet.value).putBoolean("enabled2", enabled.value).putBoolean("helmetsOn", helmetsOn.value).putBoolean("wheelOn", wheelOn.value).apply()
     }
 
     fun device(id: String) = devices.firstOrNull { it.id == id }
@@ -156,11 +161,13 @@ object Lighting {
 
     fun setActive(id: String) { activeHelmet.value = id; save(); reconcile() }
     fun setEnabled(on: Boolean) { enabled.value = on; save(); reconcile() }
+    fun setHelmetsOn(on: Boolean) { helmetsOn.value = on; save(); reconcile() }
+    fun setWheelOn(on: Boolean) { wheelOn.value = on; save(); reconcile() }
 
     /** Связи держим со всеми устройствами, где стоит галка оборудования и выбран адрес. */
     fun reconcile() {
         if (!::ctx.isInitialized) return
-        val want = devices.filter { enabled.value }
+        val want = devices.filter { enabled.value && (if (it.isHelmet) helmetsOn.value else wheelOn.value) }
         val espWant = want.filter { it.espOn && it.espAddr.isNotEmpty() }.associateBy { it.id }
         val zgWant = want.filter { it.zgOn && it.zgAddr.isNotEmpty() }.associateBy { it.id }
         esp.keys.toList().forEach { id -> if (espWant[id]?.espAddr != esp[id]?.address) { esp.remove(id)?.close() } }

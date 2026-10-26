@@ -1,5 +1,12 @@
 package com.cooper.wheellog
 
+import com.cooper.wheellog.cj.CjBottomBar
+import com.cooper.wheellog.cj.CjState
+import com.cooper.wheellog.cj.CjTab
+import com.cooper.wheellog.cj.CjTabContent
+import com.cooper.wheellog.cj.CjTheme
+import com.cooper.wheellog.cj.CjTopBar
+import com.cooper.wheellog.helmet.Lighting
 import com.cooper.wheellog.helmet.HelmetLink
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -248,6 +255,7 @@ class MainActivity : AppCompatActivity() {
         }
         mConnectionState = connectionState
         isWheelSearch = wheelSearch
+        cjSyncWheel()
         setMenuIconStates()
     }
 
@@ -744,9 +752,56 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        setupCjShell()
         checkBatteryOptimizationsAndShowAlert(this)
         // for test without wheel go to isHardwarePWM and comment Unknown case
         // DialogHelper.INSTANCE.checkPWMIsSetAndShowAlert(this);
+    }
+
+    /** Новый дизайн, часть 1: шапка и нижние вкладки на Compose; «Езда» пока прежняя (pager). */
+    private fun setupCjShell() {
+        cjSyncWheel()
+        // фон нового дизайна вместо градиента темы WheelLog
+        val bg = 0xFF0B0D10.toInt()
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bg))
+        binding.root.setBackgroundColor(bg)
+        binding.pager.setBackgroundColor(bg)
+        @Suppress("DEPRECATION")
+        window.statusBarColor = bg
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = bg
+        binding.cjTop.setContent {
+            CjTheme {
+                CjTopBar(
+                    helmetsOn = Lighting.helmetsOn.value, wheelOn = Lighting.wheelOn.value,
+                    onConnect = {
+                        if (mDeviceAddress.isEmpty()) startScanActivity() else toggleConnectToWheel()
+                    },
+                    onHelmets = { Lighting.setHelmetsOn(!Lighting.helmetsOn.value) },
+                    onWheel = { Lighting.setWheelOn(!Lighting.wheelOn.value) },
+                    onSettings = { toggleSettings() },
+                )
+            }
+        }
+        binding.cjBottom.setContent { CjTheme { CjBottomBar { cjShowTab(it) } } }
+        binding.cjTabs.setContent { CjTheme { CjTabContent(CjState.tab.value) } }
+        cjShowTab(CjState.tab.value)
+    }
+
+    private fun cjShowTab(tab: CjTab) {
+        CjState.tab.value = tab
+        val ride = tab == CjTab.RIDE
+        binding.pager.visibility = if (ride) View.VISIBLE else View.GONE
+        binding.indicator.visibility = if (ride) View.VISIBLE else View.GONE
+        binding.cjTabs.visibility = if (ride) View.GONE else View.VISIBLE
+    }
+
+    private fun cjSyncWheel() {
+        val wd = WheelData.getInstance()
+        CjState.connected.value = mConnectionState == ConnectionState.CONNECTED
+        CjState.searching.value = isWheelSearch && mConnectionState != ConnectionState.CONNECTED
+        CjState.wheelName.value = appConfig.profileName.ifEmpty { wd?.name ?: "" }
+        CjState.wheelModel.value = wd?.model ?: ""
     }
 
     private fun checkClockVisible() {
