@@ -24,7 +24,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.cooper.wheellog.compose.TripsScreen
 import com.cooper.wheellog.settings.alarmScreen
 import com.cooper.wheellog.settings.lightDeviceScreen
 import com.cooper.wheellog.settings.lightingScreen
@@ -79,7 +78,7 @@ fun CjTabContent(tab: CjTab) {
 }
 
 /** Раздел устройства открыт на Fold - на весь экран, без прибора. */
-val fullScreen = androidx.compose.runtime.derivedStateOf { CjState.tab.value == CjTab.LIGHT && lightDev.value && com.cooper.wheellog.settings.devSection.value.isNotEmpty() }
+val fullScreen = androidx.compose.runtime.derivedStateOf { (CjState.tab.value == CjTab.LIGHT && lightDev.value && com.cooper.wheellog.settings.devSection.value.isNotEmpty()) || (CjState.tab.value == CjTab.TRIPS && openTrip.value != null) }
 private val lightDev = androidx.compose.runtime.mutableStateOf(false)
 
 @Composable
@@ -98,9 +97,12 @@ private fun LightTab(wide: Boolean = false) {
 private fun TripsTab() {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
-    BackHandler(enabled = entry?.destination?.route == "log") { nav.popBackStack() }
+    val trip = openTrip.value
+    BackHandler(enabled = trip != null) { openTrip.value = null }
+    BackHandler(enabled = trip == null && entry?.destination?.route == "log") { nav.popBackStack() }
+    if (trip != null) { TripView(trip) { openTrip.value = null }; return }
     NavHost(nav, startDestination = "list") {
-        composable("list") { Column { CjHeader("Поездки", "Запись") { nav.navigate("log") }; TripsScreen() } }
+        composable("list") { TripsList(onRecord = { nav.navigate("log") }) }
         composable("log") { Column { CjSubHeader("Запись поездок") { nav.popBackStack() }; logScreen() } }
     }
 }
@@ -109,9 +111,13 @@ private fun TripsTab() {
 private fun WheelTab() {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
-    BackHandler(enabled = entry?.destination?.route == "alarms") { nav.popBackStack() }
-    NavHost(nav, startDestination = "wheel") {
-        composable("wheel") { Column { CjHeader("Колесо", "Предупреждения") { nav.navigate("alarms") }; wheelScreen() } }
+    BackHandler(enabled = entry?.destination?.route != "tele") { nav.popBackStack() }
+    NavHost(nav, startDestination = "tele") {
+        composable("tele") { WheelTelemetry(onSettings = { nav.navigate("set") }) }
+        composable("set") { Column { CjSubHeader("Настройки колеса") { nav.popBackStack() }
+            Text("ПРЕДУПРЕЖДЕНИЯ ›", color = Cj.acc, fontSize = 11.sp, letterSpacing = 1.5.sp,
+                modifier = Modifier.clickable { nav.navigate("alarms") }.padding(horizontal = 16.dp, vertical = 10.dp))
+            wheelScreen() } }
         composable("alarms") { Column { CjSubHeader("Предупреждения") { nav.popBackStack() }; alarmScreen() } }
     }
 }

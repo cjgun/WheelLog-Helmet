@@ -61,13 +61,13 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** Снимок данных колеса для экрана: опрашивается 10 раз в секунду. */
-private data class Ride(
+internal data class Ride(
     val speed: Double = 0.0, val pwm: Double = 0.0, val volt: Double = 0.0, val cur: Double = 0.0,
     val power: Double = 0.0, val temp: Int = 0, val bat: Int = 0, val trip: Double = 0.0, val total: Double = 0.0,
     val avg: Double = 0.0, val time: String = "0:00", val cells: List<List<Double>> = emptyList(),
 )
 
-private fun readRide(): Ride {
+internal fun readRide(): Ride {
     val wd = WheelData.getInstance() ?: return Ride()
     val n = runCatching { wd.adapter.cellsForWheel }.getOrDefault(0)
     // в массиве BMS бывает больше ячеек, чем у колеса, хвост - мусор; берём n и только правдоподобные
@@ -81,7 +81,7 @@ private fun readRide(): Ride {
     )
 }
 
-private fun fmt(v: Double, d: Int = 1) = String.format(Locale.US, "%.${d}f", v)
+internal fun fmt(v: Double, d: Int = 1) = String.format(Locale.US, "%.${d}f", v)
 
 /** Экран «Езда»: «Прибор» или «Цифра», под ними PWM и плитки значений. */
 @Composable
@@ -250,7 +250,7 @@ private fun Cells(blocks: List<List<Double>>) {
 }
 
 @Composable
-private fun PwmRuler(pwm: Double, marks: List<Int>) {
+internal fun PwmRuler(pwm: Double, marks: List<Int>) {
     val tm = rememberTextMeasurer()
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.Bottom) {
