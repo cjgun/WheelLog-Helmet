@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -67,8 +68,10 @@ private data class Ride(
 
 private fun readRide(): Ride {
     val wd = WheelData.getInstance() ?: return Ride()
+    val n = runCatching { wd.adapter.cellsForWheel }.getOrDefault(0)
+    // в массиве BMS бывает больше ячеек, чем у колеса, хвост - мусор; берём n и только правдоподобные
     fun cells(b: com.cooper.wheellog.utils.SmartBms?): List<Double> =
-        runCatching { b!!.cells.toList().filter { it > 1.0 } }.getOrDefault(emptyList())
+        runCatching { b!!.cells.toList().let { if (n > 0) it.take(n) else it }.filter { it in 2.5..4.5 } }.getOrDefault(emptyList())
     val c = listOf(cells(wd.bms1), cells(wd.bms2)).filter { it.isNotEmpty() }
     return Ride(
         speed = wd.speedDouble, pwm = wd.calculatedPwm, volt = wd.voltageDouble, cur = wd.currentDouble,
@@ -95,7 +98,11 @@ fun RideScreen(appConfig: AppConfig = koinInject()) {
     val hot = r.pwm >= (marks.getOrNull(1) ?: 80)
     val toggle = { mode = if (mode == "dial") "num" else "dial"; prefs.edit().putString("ride_mode", mode).apply() }
 
-    Column(Modifier.fillMaxSize().background(Cj.bg).padding(horizontal = 14.dp)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Cj.bg)) {
+    val wide = maxWidth >= 600.dp
+    val leftW = maxWidth * 0.46f
+    Row(Modifier.fillMaxSize()) {
+    Column(Modifier.then(if (wide) Modifier.width(leftW) else Modifier.fillMaxWidth()).fillMaxHeight().padding(horizontal = 14.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
             Row(Modifier.border(1.dp, Cj.hair, RoundedCornerShape(50)).padding(3.dp)) {
                 listOf("dial" to "ПРИБОР", "num" to "ЦИФРА").forEach { (m, t) ->
@@ -119,12 +126,38 @@ fun RideScreen(appConfig: AppConfig = koinInject()) {
         ))
         Spacer(Modifier.height(8.dp))
     }
+    if (wide) {
+        Box(Modifier.width(1.dp).fillMaxHeight().background(Cj.hair))
+        AllParams(r, k, mph, Modifier.weight(1f).fillMaxHeight().padding(horizontal = 18.dp))
+    }
+    }
+    }
+}
+
+/** Все параметры сеткой - правая колонка на разложенном Fold. */
+@Composable
+private fun AllParams(r: Ride, k: Double, mph: Boolean, modifier: Modifier) {
+    val wd = WheelData.getInstance()
+    val du = if (mph) "ми" else "км"; val su = if (mph) "ми/ч" else "км/ч"
+    val list = listOf(
+        fmt(r.speed * k) to su to "Скорость", fmt(r.avg * k) to su to "Средняя", fmt((wd?.topSpeedDouble ?: 0.0) * k) to su to "Максимум",
+        fmt(r.trip * k) to du to "Поездка", fmt(r.total * k) to du to "Общий", r.time to "" to "В пути",
+        fmt(r.volt) to "В" to "Напряжение", "${r.bat}" to "%" to "Заряд", fmt(r.cur) to "А" to "Ток",
+        fmt(wd?.phaseCurrentDouble ?: 0.0) to "А" to "Фазный ток", fmt(r.power, 0) to "Вт" to "Мощность", "${r.pwm.roundToInt()}" to "%" to "PWM",
+        "${r.temp}" to "°C" to "Температура", fmt(wd?.angle ?: 0.0) to "°" to "Наклон", fmt(wd?.maxPwm ?: 0.0, 0) to "%" to "Макс. PWM",
+    )
+    Column(modifier.padding(top = 10.dp)) {
+        Text("ВСЕ ПАРАМЕТРЫ", fontSize = 10.5.sp, letterSpacing = 1.6.sp, color = Cj.mute, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
+        Tiles(list)
+    }
 }
 
 @Composable
 private fun Dial(v: Double, maxV: Int, col: Color, unit: String, odo: String) {
     val tm = rememberTextMeasurer()
-    BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(1.18f), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    val side = minOf(maxWidth, maxHeight * 1.18f)
+    BoxWithConstraints(Modifier.width(side).aspectRatio(1.18f), contentAlignment = Alignment.Center) {
         val w = maxWidth
         Canvas(Modifier.fillMaxSize()) {
             val cx = size.width / 2; val cy = size.height * 0.56f; val R = size.width * 0.40f; val dd = density
@@ -165,12 +198,13 @@ private fun Dial(v: Double, maxV: Int, col: Color, unit: String, odo: String) {
             }
         }
     }
+    }
 }
 
 @Composable
 private fun NumberView(r: Ride, k: Double, unit: String) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        val fs = with(LocalDensity.current) { (maxWidth * 0.5f).toSp() }
+        val fs = with(LocalDensity.current) { minOf(maxWidth * 0.5f, (maxHeight - (if (r.cells.isNotEmpty()) 150 else 110).dp) * 0.92f).coerceAtLeast(60.dp).toSp() }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("${(r.speed * k).roundToInt()}", fontSize = fs, lineHeight = fs, fontWeight = FontWeight(200), letterSpacing = (-3).sp, textAlign = TextAlign.Center)
             Text(unit, fontSize = 11.sp, letterSpacing = 3.sp, color = Cj.mute, fontWeight = FontWeight.SemiBold)
@@ -190,14 +224,14 @@ private fun NumberView(r: Ride, k: Double, unit: String) {
 /** Ячейки батареи точками, по строке на блок: цвет - отклонение от средней. */
 @Composable
 private fun Cells(blocks: List<List<Double>>) {
-    val all = blocks.flatten(); val avg = all.average(); val mn = all.min(); val mx = all.max()
+    val all = blocks.flatten(); val avg = all.sorted()[all.size / 2]; val mn = all.min(); val mx = all.max()  // от медианы
     Canvas(Modifier.fillMaxWidth().height((18 * blocks.size + 8).dp).padding(top = 8.dp)) {
         blocks.forEachIndexed { b, row ->
             val y = 9.dp.toPx() + b * 18.dp.toPx()
             row.forEachIndexed { i, c ->
                 val x = 6f + i * (size.width - 12f) / max(1, row.size - 1)
                 val d = abs(c - avg)
-                val col = if (d < 0.015) Cj.green else if (d < 0.03) Cj.warm else Cj.red
+                val col = if (d < 0.012) Cj.green else if (d < 0.03) Cj.warm else Cj.red
                 val ext = c == mn || c == mx
                 drawCircle(col.copy(alpha = if (ext) 1f else 0.85f), if (ext) 5.dp.toPx() * 0.6f else 3.dp.toPx() * 0.7f, Offset(x, y))
                 if (ext) drawCircle(col, 4.5.dp.toPx(), Offset(x, y), style = Stroke(1.5f))
