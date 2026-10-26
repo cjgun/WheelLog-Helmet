@@ -37,6 +37,11 @@ import androidx.compose.ui.window.*
 import com.cooper.wheellog.AppConfig
 import com.cooper.wheellog.R
 import com.cooper.wheellog.WheelLog
+import com.cooper.wheellog.cj.Cj
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.clip
 import com.cooper.wheellog.utils.ThemeEnum
 import com.cooper.wheellog.utils.ThemeIconEnum
 import com.cooper.wheellog.utils.ThemeManager
@@ -70,13 +75,7 @@ fun clickablePref(
             desc = desc,
             showDiv = showDiv,
             rightContent = {
-                if (showArrowIcon) {
-                    Icon(
-                        Icons.Rounded.KeyboardArrowRight,
-                        tint = MaterialTheme.colorScheme.primary,
-                        contentDescription = "next"
-                    )
-                }
+                if (showArrowIcon) Text("›", fontSize = 20.sp, color = Cj.dim)
             }
         )
     }
@@ -96,10 +95,12 @@ fun switchPref(
     baseSettings(
         name = name,
         desc = desc,
+        descAsHint = true,
         themeIcon = themeIcon,
         showDiv = showDiv,
         rightContent = {
             Switch(
+                colors = cjSwitchColors(),
                 checked = mutableState.value,
                 onCheckedChange = {
                     mutableState.value = it
@@ -248,98 +249,95 @@ fun sliderPref(
     baseSettings(
         name = name,
         desc = desc,
+        descAsHint = true,
         themeIcon = themeIcon,
         showDiv = showDiv,
         rightContent = {
-            if (showSwitch) {
-                val offValue = valueWhenSwitchOff * visualMultiple
-                Switch(
-                    checked = disableSwitchAtMin && sliderPosition != offValue,
-                    onCheckedChange = {
-                        if (!it) {
-                            prevPosition = sliderPosition
-                            sliderPosition = offValue
-                        } else {
-                            if (prevPosition == offValue) {
-                                prevPosition = offValue + 1f
-                            }
-                            sliderPosition = prevPosition
-                        }
-                        onChanged(sliderPosition / visualMultiple)
-                    },
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (showSlider) Text(
+                    String.format(Locale.US, format, sliderPosition) + unitStr.replace(" %", "%"),
+                    fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = Cj.ink,
+                    modifier = Modifier.clickable { isDialogShown = true }.padding(start = 8.dp, top = 4.dp, bottom = 4.dp),
                 )
-            }
-            /* else {
-                IconButton(
-                    onClick = { isDialogShown = true }
-                ) {
-                    Icon(
-                        Icons.Rounded.Info,
-                        tint = MaterialTheme.colorScheme.primary,
-                        contentDescription = "info"
+                if (showSwitch) {
+                    val offValue = valueWhenSwitchOff * visualMultiple
+                    Switch(
+                        colors = cjSwitchColors(),
+                        modifier = Modifier.padding(start = 12.dp),
+                        checked = disableSwitchAtMin && sliderPosition != offValue,
+                        onCheckedChange = {
+                            if (!it) {
+                                prevPosition = sliderPosition
+                                sliderPosition = offValue
+                            } else {
+                                if (prevPosition == offValue) {
+                                    prevPosition = offValue + 1f
+                                }
+                                sliderPosition = prevPosition
+                            }
+                            onChanged(sliderPosition / visualMultiple)
+                        },
                     )
                 }
-            } */
+            }
         },
         bottomContent = {
             AnimatedVisibility(showSlider) {
-                Row {
-                    Slider(
-                        value = sliderPosition,
-                        onValueChange = { sliderPosition = it },
-                        valueRange = min * visualMultiple..max * visualMultiple,
-                        onValueChangeFinished = {
-                            onChanged(sliderPosition / visualMultiple)
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.secondary,
-                            activeTrackColor = MaterialTheme.colorScheme.secondary
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                    val maxCardWidth =
-                        if ((String.format(format, max * visualMultiple)).length < 4) {
-                            60.dp
-                        } else {
-                            100.dp
-                        }
-                    Card(
-                        modifier = Modifier
-                            .sizeIn(maxWidth = maxCardWidth)
-                            .padding(
-                                top = 8.dp,
-                                start = 8.dp
-                            ).clickable {
-                                isDialogShown = true
-                            },
-                    ) {
-                        Text(
-                            text = String.format(format, sliderPosition),
-                            maxLines = 1,
-                            modifier = Modifier.padding(6.dp).fillMaxWidth(),
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                color = MaterialTheme.colorScheme.primary
-                            ),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                    if (unitStr.isNotEmpty()) {
-                        Text(
-                            text = unitStr,
-                            maxLines = 1,
-                            modifier = Modifier.padding(
-                                top = 14.dp,
-                                start = 2.dp
-                            ),
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                color = MaterialTheme.colorScheme.primary
-                            ),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
+                cjSlider(
+                    value = sliderPosition,
+                    onValueChange = { sliderPosition = it },
+                    range = min * visualMultiple..max * visualMultiple,
+                    onFinished = { onChanged(sliderPosition / visualMultiple) },
+                )
             }
         }
+    )
+}
+
+/** Ползунок как в макете: тонкая линия, оранжевая до ручки, круглая ручка. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun cjSlider(value: Float, onValueChange: (Float) -> Unit, range: ClosedFloatingPointRange<Float>, onFinished: () -> Unit = {}) {
+    val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = range,
+        onValueChangeFinished = onFinished,
+        interactionSource = src,
+        modifier = Modifier.fillMaxWidth().height(32.dp),
+        thumb = {
+            Box(Modifier.size(18.dp).clip(CircleShape).background(Cj.acc).border(3.dp, Color(0xFF0B0D10), CircleShape))
+        },
+        track = { st ->
+            val f = ((st.value - st.valueRange.start) / (st.valueRange.endInclusive - st.valueRange.start)).coerceIn(0f, 1f)
+            androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(4.dp)) {
+                val y = size.height / 2
+                drawLine(Color(0x22FFFFFF), androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), size.height, StrokeCap.Round)
+                drawLine(Cj.acc, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width * f, y), size.height, StrokeCap.Round)
+            }
+        },
+    )
+}
+
+/** Выключатель в цветах приложения: включён - оранжевый. */
+@Composable
+fun cjSwitchColors() = SwitchDefaults.colors(
+    checkedThumbColor = Color(0xFF1A1206),
+    checkedTrackColor = Cj.acc,
+    checkedBorderColor = Cj.acc,
+    uncheckedThumbColor = Cj.mute,
+    uncheckedTrackColor = Color(0x14FFFFFF),
+    uncheckedBorderColor = Color(0x33FFFFFF),
+)
+
+/** Подпись раздела настроек: мелко, разрядкой, без рамки. */
+@Composable
+fun cjSection(name: String) {
+    Text(
+        name.uppercase(), fontSize = 10.5.sp, letterSpacing = 1.6.sp, color = Cj.mute,
+        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 2.dp),
     )
 }
 
@@ -348,50 +346,9 @@ fun group(
     name: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(modifier = Modifier.padding(vertical = 8.dp)) {
-        var contentVisible by remember { mutableStateOf(true) }
-        Surface(
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            shape = RoundedCornerShape(
-                topStart = 4.dp,
-                topEnd = 4.dp,
-                bottomStart = 0.dp,
-                bottomEnd = 0.dp),
-            onClick = {
-                contentVisible = !contentVisible
-            },
-        ) {
-            Text(
-                modifier = Modifier
-                    .height(48.dp)
-                    .wrapContentHeight()
-                    .padding(
-                        start = 20.dp,
-                        top = 8.dp,
-                        bottom = 8.dp,
-                        end = 20.dp
-                    ),
-                text = if (contentVisible) { "" } else { "➖   " } + name,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-        }
-        AnimatedVisibility (contentVisible) {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(
-                    topStart = 0.dp,
-                    topEnd = 4.dp,
-                    bottomStart = 4.dp,
-                    bottomEnd = 4.dp
-                ),
-            ) {
-                Column {
-                    content()
-                }
-            }
-        }
+    Column {
+        cjSection(name)
+        content()
     }
 }
 
@@ -474,6 +431,34 @@ fun list(
         )
     }
 
+    if (keys.size in 2..3) {
+        baseSettings(
+            name = name,
+            desc = desc,
+            descAsHint = true,
+            themeIcon = themeIcon,
+            showDiv = showDiv,
+            bottomContent = {
+                Row(
+                    Modifier.fillMaxWidth().border(1.dp, Cj.hair, RoundedCornerShape(12.dp)).padding(3.dp)
+                ) {
+                    keys.forEach { key ->
+                        val sel = selectedIndex == key
+                        Box(
+                            Modifier.weight(1f).clip(RoundedCornerShape(9.dp))
+                                .background(if (sel) Cj.acc.copy(alpha = 0.16f) else Color.Transparent)
+                                .clickable { selectedIndex = key; onSelect(Pair(key, entries[key] ?: "")) }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(entries[key] ?: "", fontSize = 13.sp, color = if (sel) Cj.acc else Cj.mute, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            },
+        )
+        return
+    }
     val onClick: () -> Unit = {
         showDialog = true
     }
@@ -491,10 +476,12 @@ fun list(
                 if (selectedIndex != "") {
                     Text(
                         maxLines = 1,
-                        text = entries[selectedIndex] ?: "",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = (entries[selectedIndex] ?: "") + "  ›",
+                        fontSize = 14.sp,
+                        color = Cj.mute,
                         textAlign = TextAlign.End,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 160.dp),
                     )
                 }
             }
@@ -817,82 +804,51 @@ fun clickableAndAlert(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun baseSettings(
     name: String,
     desc: String = "",
     themeIcon: ThemeIconEnum? = null,
     showDiv: Boolean = true,
+    descAsHint: Boolean = false,
     rightContent: @Composable BoxScope.() -> Unit = { },
     bottomContent: @Composable (BoxScope.() -> Unit)? = null,
 ) {
+    // Значок темы WheelLog не рисуем: в новом виде строки без значков.
+    // Длинное пояснение у выключателей и ползунков - по долгому нажатию на название.
+    val context = LocalContext.current
+    val hint = descAsHint && desc.length > 40
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(
-                start = 16.dp,
-                end = 16.dp,
-                top = 16.dp,
-                bottom = 0.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp)
     ) {
-        Row (
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Start,
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Column(
-                modifier = Modifier.weight(1f)
-                    .padding(end = 16.dp),
+                modifier = Modifier.weight(1f).padding(end = 12.dp)
+                    .then(if (hint) Modifier.combinedClickable(onClick = {}, onLongClick = {
+                        android.widget.Toast.makeText(context, desc, android.widget.Toast.LENGTH_LONG).show()
+                    }) else Modifier),
                 verticalArrangement = Arrangement.Center
             ) {
-                Row (
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Start,
-                ) {
-                    if (themeIcon != null) {
-                        Icon(
-                            painterResource(id = ThemeManager.getId(themeIcon)),
-                            contentDescription = "",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .width((24 + 8).dp)
-                                .height(24.dp)
-                                .padding(end = 8.dp)
-                        )
-                    }
+                Text(text = name, fontSize = 15.sp, color = Cj.ink, overflow = TextOverflow.Ellipsis)
+                if (desc.isNotEmpty() && !hint) {
                     Text(
-                        text = name,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.primary
-                        ),
-                        textAlign = TextAlign.Start,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                if (desc.isNotEmpty()) {
-                    Text(
-                        modifier = Modifier.padding(top = 4.dp),
-                        text = desc,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Start,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier.padding(top = 2.dp),
+                        text = desc, fontSize = 12.sp, color = Cj.mute, overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            Box()
-            {
-                rightContent()
-            }
+            Box { rightContent() }
         }
         if (bottomContent != null) {
-            Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp) )
-            {
-                bottomContent()
-            }
+            Box(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) { bottomContent() }
         }
         if (showDiv) {
-            Divider(modifier = Modifier.padding(top = 16.dp))
+            HorizontalDivider(modifier = Modifier.padding(top = 14.dp), color = Cj.hair)
         } else {
-            Spacer(modifier = Modifier.padding(top = 16.dp))
+            Spacer(modifier = Modifier.padding(top = 14.dp))
         }
     }
 }

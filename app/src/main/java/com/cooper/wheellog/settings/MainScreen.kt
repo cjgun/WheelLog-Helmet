@@ -43,7 +43,8 @@ private fun settingsAppBar(
     TopAppBar(
         title = { Text(stringResource(currentScreen.title)) },
         colors = TopAppBarDefaults.mediumTopAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = com.cooper.wheellog.cj.Cj.bg,
+            navigationIconContentColor = com.cooper.wheellog.cj.Cj.mute,
         ),
         modifier = modifier,
         navigationIcon = {
@@ -75,6 +76,7 @@ fun mainScreen(
         backStackEntry?.destination?.route ?: SettingsScreenEnum.Start.name
     )
     Scaffold(
+        containerColor = com.cooper.wheellog.cj.Cj.bg,
         topBar = {
             settingsAppBar(
                 currentScreen = currentScreen,

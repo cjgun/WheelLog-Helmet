@@ -747,7 +747,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.settingsView.apply {
             setContent {
-                AppTheme(useDarkTheme = true) {
+                com.cooper.wheellog.cj.CjTheme {
                     settingsNavHostController = rememberNavController()
                     mainScreen(navController = settingsNavHostController!!)
                 }

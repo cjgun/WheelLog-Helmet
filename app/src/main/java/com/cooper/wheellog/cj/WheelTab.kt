@@ -30,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -119,8 +121,11 @@ fun WheelTelemetry(onSettings: () -> Unit, appConfig: AppConfig = koinInject()) 
         // наклон
         val ang = wd?.angle ?: 0.0
         Sec("Наклон", (if (ang > 0) "назад " else "вперёд ") + fmt(abs(ang)) + "°" to Cj.mute)
-        Canvas(Modifier.fillMaxWidth().height(70.dp)) {
-            val cx = size.width / 2; val cy = size.height * 0.45f; val k = (size.width / 2 - 16f) / 15f
+        Row(Modifier.padding(top = 4.dp)) { Text("ВПЕРЁД", fontSize = 10.sp, color = Cj.mute, letterSpacing = 1.4.sp, modifier = Modifier.weight(1f)); Text("НАЗАД", fontSize = 10.sp, color = Cj.mute, letterSpacing = 1.4.sp) }
+        Canvas(Modifier.fillMaxWidth().height(84.dp)) {
+            val cx = size.width / 2; val cy = size.height * 0.36f; val k = (size.width / 2 - 16f) / 15f
+            val lp = android.graphics.Paint().apply { color = Cj.mute.toArgb(); textSize = 10.sp.toPx(); textAlign = android.graphics.Paint.Align.CENTER; isAntiAlias = true }
+            for (a in -15..15 step 5) drawContext.canvas.nativeCanvas.drawText(if (a > 0) "+$a°" else "$a°", cx + a * k, cy + 30 * density, lp)
             for (a in -15..15) { val x = cx + a * k; val maj = a % 5 == 0
                 drawLine(if (maj) Color(0x80FFFFFF) else Color(0x26FFFFFF), Offset(x, cy - (if (maj) 11 else 6) * density), Offset(x, cy + (if (maj) 11 else 6) * density), if (maj) 2f else 1.2f) }
             val v = ang.coerceIn(-15.0, 15.0).toFloat(); val x = cx + v * k; val col = if (v > 2.5f) Cj.red else Cj.acc
@@ -128,7 +133,6 @@ fun WheelTelemetry(onSettings: () -> Unit, appConfig: AppConfig = koinInject()) 
             drawCircle(Brush.radialGradient(listOf(col, Color.Transparent), Offset(x, cy), 14 * density), 14 * density, Offset(x, cy))
             drawCircle(Color.White, 4 * density, Offset(x, cy))
         }
-        Row { Text("ВПЕРЁД", fontSize = 10.sp, color = Cj.mute, letterSpacing = 1.4.sp, modifier = Modifier.weight(1f)); Text("НАЗАД", fontSize = 10.sp, color = Cj.mute, letterSpacing = 1.4.sp) }
         // температура и пробег
         Sec("Температура и пробег")
         Vals(listOf(Triple("${r.temp}", "°C", "Контроллер") to (hTmp to Cj.red), Triple(fmt(r.trip), "км", "Поездка") to null, Triple(r.time, "", "В пути") to null))

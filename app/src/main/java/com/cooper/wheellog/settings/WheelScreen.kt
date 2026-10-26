@@ -23,7 +23,9 @@ fun wheelScreen(appConfig: AppConfig = koinInject())
         modifier = Modifier
             .verticalScroll(rememberScrollState())
     ) {
-        when (WheelData.getInstance().wheelType) {
+        val type = WheelData.getInstance().wheelType
+        if (type != Constants.WHEEL_TYPE.Unknown) cjSection(type.name.replace('_', ' '))
+        when (type) {
             Constants.WHEEL_TYPE.NINEBOT_Z -> ninebotZ()
             Constants.WHEEL_TYPE.INMOTION -> inmotion()
             Constants.WHEEL_TYPE.INMOTION_V2 -> inmotionV2()
@@ -35,6 +37,7 @@ fun wheelScreen(appConfig: AppConfig = koinInject())
             )
         }
         if (WheelData.getInstance().wheelType != Constants.WHEEL_TYPE.Unknown) {
+            cjSection("Общие")
             forAllWheel()
         }
     }

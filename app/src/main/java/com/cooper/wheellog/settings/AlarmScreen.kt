@@ -7,6 +7,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.cooper.wheellog.AppConfig
 import com.cooper.wheellog.R
@@ -23,6 +31,7 @@ fun alarmScreen(appConfig: AppConfig = koinInject()) {
     ) {
         var alarmsEnabled by remember { mutableStateOf(appConfig.alarmsEnabled) }
         var pwmBasedAlarms by remember { mutableStateOf(appConfig.pwmBasedAlarms) }
+        var pwmTick by remember { mutableIntStateOf(0) }
         val ksAlteredAlarms =
             WheelData.getInstance().wheelType == Constants.WHEEL_TYPE.KINGSONG
                     && WheelData.getInstance().model.compareTo("KS-18A") != 0
@@ -39,14 +48,14 @@ fun alarmScreen(appConfig: AppConfig = koinInject()) {
         }
 
         AnimatedVisibility(alarmsEnabled) {
-            switchPref(
-                name = stringResource(R.string.pwm_based_alarms_title),
-                desc = stringResource(R.string.pwm_based_alarms_description),
-                default = pwmBasedAlarms,
+            list(
+                name = "Режим",
+                entries = mapOf("pwm" to "По PWM", "speed" to "По скорости"),
+                defaultKey = if (pwmBasedAlarms) "pwm" else "speed",
                 showDiv = false,
             ) {
-                appConfig.pwmBasedAlarms = it
-                pwmBasedAlarms = it
+                appConfig.pwmBasedAlarms = it.first == "pwm"
+                pwmBasedAlarms = it.first == "pwm"
             }
         }
 
@@ -171,6 +180,7 @@ fun alarmScreen(appConfig: AppConfig = koinInject()) {
                 group(
                     name = stringResource(R.string.pwm_based_alarms_title)
                 ) {
+                    pwmMarks(appConfig.warningPwm, appConfig.alarmFactor1, appConfig.alarmFactor2, pwmTick)
                     if (!ksAlteredAlarms && !appConfig.hwPwm) {
                         sliderPref(
                             name = stringResource(R.string.rotation_speed_title),
@@ -217,6 +227,7 @@ fun alarmScreen(appConfig: AppConfig = koinInject()) {
                         max = 99f,
                     ) {
                         appConfig.alarmFactor1 = it.toInt()
+                        pwmTick++
                     }
 
                     sliderPref(
@@ -228,6 +239,7 @@ fun alarmScreen(appConfig: AppConfig = koinInject()) {
                         max = 99f,
                     ) {
                         appConfig.alarmFactor2 = it.toInt()
+                        pwmTick++
                     }
 
                     var warnSpeedEnabled by remember { mutableStateOf(appConfig.warningSpeed != 0) }
@@ -258,6 +270,7 @@ fun alarmScreen(appConfig: AppConfig = koinInject()) {
                         disableSwitchAtMin = true,
                     ) {
                         appConfig.warningPwm = it.toInt()
+                        pwmTick++
                         warnPwmEnabled = it > 0
                     }
 
@@ -347,6 +360,30 @@ fun alarmScreen(appConfig: AppConfig = koinInject()) {
                     appConfig.alarmWheel = it
                 }
             }
+        }
+    }
+}
+
+/** Полоса PWM 0-100 от зелёного к красному, отметки: предварительное, начало, предел. */
+@Composable
+private fun pwmMarks(warn: Int, start: Int, limit: Int, @Suppress("UNUSED_PARAMETER") tick: Int) {
+    androidx.compose.foundation.Canvas(
+        Modifier.fillMaxWidth().height(44.dp).padding(start = 16.dp, end = 16.dp, top = 10.dp)
+    ) {
+        val y = size.height - 8.dp.toPx()
+        drawLine(
+            androidx.compose.ui.graphics.Brush.horizontalGradient(
+                listOf(Color(0xFF4FD18B), Color(0xFFFFD166), Color(0xFFFF9A2E), Color(0xFFFF4B3E))
+            ),
+            Offset(0f, y), Offset(size.width, y), 4.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round,
+        )
+        val paint = android.graphics.Paint().apply {
+            color = 0xFF7D848E.toInt(); textSize = 10.sp.toPx(); textAlign = android.graphics.Paint.Align.CENTER; isAntiAlias = true
+        }
+        listOf(warn, start, limit).filter { it in 1..99 }.forEach { v ->
+            val x = size.width * v / 100f
+            drawLine(Color.White, Offset(x, y - 9.dp.toPx()), Offset(x, y + 6.dp.toPx()), 2.dp.toPx())
+            drawContext.canvas.nativeCanvas.drawText("$v", x, y - 13.dp.toPx(), paint)
         }
     }
 }

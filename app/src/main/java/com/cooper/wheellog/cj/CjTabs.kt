@@ -17,6 +17,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -78,7 +80,10 @@ fun CjTabContent(tab: CjTab) {
 }
 
 /** Раздел устройства открыт на Fold - на весь экран, без прибора. */
-val fullScreen = androidx.compose.runtime.derivedStateOf { (CjState.tab.value == CjTab.LIGHT && lightDev.value && com.cooper.wheellog.settings.devSection.value.isNotEmpty()) || (CjState.tab.value == CjTab.TRIPS && openTrip.value != null) }
+val fullScreen = androidx.compose.runtime.derivedStateOf { (CjState.tab.value == CjTab.LIGHT && lightDev.value && com.cooper.wheellog.settings.devSection.value.isNotEmpty()) || (CjState.tab.value == CjTab.TRIPS && (openTrip.value != null || tripsSub.value)) || (CjState.tab.value == CjTab.WHEEL && wheelSub.value) }
+// второй уровень «Поездок» («Запись») и «Колеса» (настройки, предупреждения) - на Fold тоже на весь экран
+private val tripsSub = androidx.compose.runtime.mutableStateOf(false)
+private val wheelSub = androidx.compose.runtime.mutableStateOf(false)
 private val lightDev = androidx.compose.runtime.mutableStateOf(false)
 
 @Composable
@@ -100,6 +105,7 @@ private fun TripsTab() {
     val trip = openTrip.value
     BackHandler(enabled = trip != null) { openTrip.value = null }
     BackHandler(enabled = trip == null && entry?.destination?.route == "log") { nav.popBackStack() }
+    tripsSub.value = entry?.destination?.route == "log"
     if (trip != null) { TripView(trip) { openTrip.value = null }; return }
     NavHost(nav, startDestination = "list") {
         composable("list") { TripsList(onRecord = { nav.navigate("log") }) }
@@ -112,12 +118,29 @@ private fun WheelTab() {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     BackHandler(enabled = entry?.destination?.route != "tele") { nav.popBackStack() }
+    wheelSub.value = entry != null && entry?.destination?.route != "tele"
     NavHost(nav, startDestination = "tele") {
         composable("tele") { WheelTelemetry(onSettings = { nav.navigate("set") }) }
         composable("set") { Column { CjSubHeader("Настройки колеса") { nav.popBackStack() }
-            Text("ПРЕДУПРЕЖДЕНИЯ ›", color = Cj.acc, fontSize = 11.sp, letterSpacing = 1.5.sp,
-                modifier = Modifier.clickable { nav.navigate("alarms") }.padding(horizontal = 16.dp, vertical = 10.dp))
+            WheelSettingsHead(onAlarms = { nav.navigate("alarms") })
             wheelScreen() } }
         composable("alarms") { Column { CjSubHeader("Предупреждения") { nav.popBackStack() }; alarmScreen() } }
     }
+}
+
+/** Верх «Настроек колеса»: колесо и MAC, пункт «Предупреждения» со сводкой порогов. */
+@Composable
+private fun WheelSettingsHead(onAlarms: () -> Unit, appConfig: com.cooper.wheellog.AppConfig = org.koin.compose.koinInject()) {
+    val wd = com.cooper.wheellog.WheelData.getInstance()
+    val line = listOf(CjState.wheelName.value, wd?.model ?: "", wd?.wheelType?.name?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "", appConfig.lastMac.trimEnd('_'))
+        .filter { it.isNotEmpty() && it != "Unknown" }.joinToString(" · ")
+    Row(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (CjState.connected.value) Cj.green else Cj.dim))
+        Text("  " + line.ifEmpty { "колесо не подключалось" }, fontSize = 12.5.sp, color = Cj.mute)
+    }
+    val sum = if (!appConfig.alarmsEnabled) "выключены"
+        else (if (appConfig.pwmBasedAlarms) "по PWM ${appConfig.alarmFactor1}-${appConfig.alarmFactor2}%" else "по скорости ${appConfig.alarm1Speed} км/ч") +
+            (if (appConfig.alarmCurrent > 0) " · ток ${appConfig.alarmCurrent} А" else "") +
+            (if (appConfig.alarmTemperature > 0) " · ${appConfig.alarmTemperature} °C" else "")
+    com.cooper.wheellog.settings.clickablePref(name = "Предупреждения", desc = sum, onClick = onAlarms)
 }
