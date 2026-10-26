@@ -18,6 +18,17 @@
 | 09 | 09-glavnyj-3-varianta.html | 26.10 | главный экран по раскладке WheelLog, 3 варианта; владелец: «выглядят дёшево» | claude.ai/artifact/QibPaYKTBoEpGWbwDBfqvL |
 | 10 | 10-glavnyj-priborka.html | 26.10 | «приборка»: тонкие шкалы, лёгкие цифры; понравились оба варианта | claude.ai/artifact/GgBpADcVj1hAMJ4hhwSVwM |
 | 11-15 | 11...15-glavnyj-dva-pribora-v3...v7.html | 26.10 | один экран, переключатель «Прибор / Цифра», доводка по пометкам | claude.ai/artifact/Riisp3FKdQkrZhh36zm2ce (версии 1-7) |
+| 16 | 16-svet-priborka-v1.html | 26.10 | экран «Свет» в стиле приборки | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef |
+| 17 | 17-svet-priborka-mx470.html | 26.10 | «Свет» с MX470 по фото (бирюзовый) | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef v2 |
+| 18 | 18-svet-s-glavnym.html | 26.10 | «Свет» + утверждённый главный во вкладке Езда и на Fold; лента MX470 как у MX700 | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef v3 |
+| 19 | 19-svet-lenta-kak-nakleena.html | 26.10 | лента LS2 по отметкам владельца (как наклеена), MX700 без нарисованного свечения | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef v4 |
+| 20 | 20-svet-koleso.html | 26.10 | колесо Sherman L по фото, 4 вида, точки ленты по ролям (временные) | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef v5 |
+| 21 | 21-svet-shmel-foto.html | 26.10 | настоящий Шмель по фото владельца: обод и педали | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef v6 |
+| 22 | 22-svet-shmel-otmetki.html | 26.10 | Шмель: ленты по отметкам владельца - торцы и педаль, без обода, один вид сбоку | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef v7 |
+| 23 | 23-poezdka-karta-grafiki.html | 26.10 | поездка 20.10: карта (OSM, тёмная) и 5 полос графиков с общим курсором, Fold | claude.ai/artifact/KwbdLLaNKgJbC7A1eEx6ib |
+| 24 | 24-koleso-telemetriya.html | 26.10 | вкладка Колесо: живая телеметрия по журналу, ячейки, наклон | claude.ai/artifact/1A6zRVH6CxqTesNdoMR84j |
+| 25 | 25-edinyj-vid.html | 26.10 | единый вид разделов: заголовки, действие текстом, плоские списки, Колесо = телеметрия, 2-й уровень на Fold во весь экран | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef v10 |
+| 26 | 26-ves-dizajn.html | 26.10 | весь дизайн в одном макете: 5 настоящих поездок с картой и графиками, вторые экраны в стиле главного, проверка 32 экранов | claude.ai/artifact/3JvS2Tdar3Sx2b2TEw24ef v15 |
 
 Версии 1 и 2 «двух приборов» (первый вариант и одометр в обоих режимах) остались только в истории артефакта на claude.ai.
 
