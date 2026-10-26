@@ -444,7 +444,7 @@ private fun fxCard(d: LightDevice, link: EspLink?) {
                 slider("Яркость эффекта", c.fxBright.toFloat(), 10f, 255f, 5f, "%.0f") { v -> upd { fxBright = v.roundToInt() } }
             }
             switchRow("Перед белый", c.fxFlags and Fx.F_FRONT_WHITE != 0) { on -> upd { fxFlags = if (on) fxFlags or Fx.F_FRONT_WHITE else fxFlags and Fx.F_FRONT_WHITE.inv() } }
-            switchRow("Затылок всегда красный", c.fxFlags and Fx.F_BACK_RED != 0) { on -> upd { fxFlags = if (on) fxFlags or Fx.F_BACK_RED else fxFlags and Fx.F_BACK_RED.inv() } }
+            switchRow("Зад всегда красный", c.fxFlags and Fx.F_BACK_RED != 0) { on -> upd { fxFlags = if (on) fxFlags or Fx.F_BACK_RED else fxFlags and Fx.F_BACK_RED.inv() } }
         }
         Text("Стоп, повороты и предупреждения колеса всегда поверх эффекта. На картинке эффект показан на 15 км/ч.",
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
@@ -642,9 +642,9 @@ private fun DrawScope.led(p: Offset, c: Color, k: Float) {
 private val RING = listOf(Role.FRONT_R, Role.SIDE_R, Role.BACK, Role.SIDE_L, Role.FRONT_L)
 
 /**
- * Место каждой точки на кольце ленты шлема, u: 0 перед по центру, 0.25 правый бок, 0.5 затылок, 0.75 левый бок
+ * Место каждой точки на кольце ленты шлема, u: 0 перед по центру, 0.25 правый бок, 0.5 зад, 0.75 левый бок
  * (как HelmetViews). Кольцо - роли по кругу пропорционально числу точек, у подбородка небольшой зазор.
- * Стоп-полоса - на затылке, козырёк и выключенные точки не рисуются (-1).
+ * Стоп-полоса - сзади, козырёк и выключенные точки не рисуются (-1).
  */
 private fun helmetU(segs: List<Seg>): FloatArray {
     val out = FloatArray(segs.sumOf { it.count }) { -1f }
@@ -655,8 +655,8 @@ private fun helmetU(segs: List<Seg>): FloatArray {
     var k = 0
     for (role in listOf(-1) + RING) segs.forEachIndexed { si, s ->
         if (s.role != role) return@forEachIndexed
-        // rev - точки идут от затылка ко лбу (бег поворота). Кольцо слева идёт от затылка ко лбу, справа ото лба
-        // к затылку: левый сегмент с rev по кольцу прямой, без rev - обратный. Как ringLayout() в прошивке.
+        // rev - точки идут сзади вперёд (бег поворота). Кольцо слева идёт сзади вперёд, справа спереди
+        // назад: левый сегмент с rev по кольцу прямой, без rev - обратный. Как ringLayout() в прошивке.
         val flip = s.rev != (role == Role.SIDE_L || role == Role.FRONT_L)
         for (i in 0 until s.count) {
             val q = if (flip) s.count - 1 - i else i

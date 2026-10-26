@@ -120,7 +120,7 @@ p{margin:0;max-width:68ch}
   <div class="notes">
     <div><b>Шлем - главный герой</b><span>Картинка шлема с живой лентой сверху каждого экрана: любая правка сразу видна на ней.</span></div>
     <div><b>Разделы вместо полотна</b><span>Эффект, Лента и цвета, Стоп и сигналы, Яркость и ток, Связь, Плата. В каждом 3-6 настроек.</span></div>
-    <div><b>Один выбор цвета</b><span>Везде одно окно снизу: палитра с чёрным и белым, свой цвет, последние цвета. У сегмента ещё «как у роли» и «не горит».</span></div>
+    <div><b>Только свой цвет</b><span>Готовой палитры нет: большой квадрат цвета и полоса оттенка, недавние цвета и кнопка «Убрать цвет». Одно окно на всё приложение.</span></div>
     <div><b>Одна кнопка записи</b><span>Плашка «Записать в шлем» внизу, только когда что-то изменилось. Сейчас кнопок записи четыре по карточкам.</span></div>
   </div>
 
@@ -178,39 +178,41 @@ p{margin:0;max-width:68ch}
     </section>
 
     <section class="scr">
-      <div class="cap"><b>4. Выбор цвета</b><span>Одно окно снизу для всех цветов. Чёрный и белый всегда есть, свой цвет - квадратом и полосой оттенка.</span></div>
+      <div class="cap"><b>4. Выбор цвета</b><span>Одно окно снизу для всех цветов. Только свой цвет: квадрат и оттенок, недавние, «Убрать цвет».</span></div>
       <div class="ph">
         <div class="bar"><span class="back">‹</span><span class="t">Эффект</span></div>
         <div class="hero" style="opacity:.45"><canvas data-v="ff-back" data-fx="comet"></canvas></div>
         <div class="sheet">
           <div class="grab"></div>
           <div class="row"><b style="font-size:16px">Цвет 1 · голова кометы</b><span class="sp"></span><span class="pill" style="background:#00c8ff;color:#00222b">#00C8FF</span></div>
-          <div class="pal" id="pal"></div>
-          <div class="lbl" style="color:var(--a-mute)">Свой</div>
-          <div class="sv"></div><div class="hue"></div>
+          <div class="sv" style="height:170px;background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,#00c8ff)"></div>
+          <div class="hue" style="height:16px;border-radius:8px"></div>
           <div class="lbl" style="color:var(--a-mute)">Недавние</div>
-          <div class="row"><i style="width:26px;height:26px;border-radius:50%;background:#ff2a00"></i><i style="width:26px;height:26px;border-radius:50%;background:#00ff9c"></i><i style="width:26px;height:26px;border-radius:50%;background:#ffc400"></i><span class="sp"></span><button class="btn pri">Готово</button></div>
+          <div class="row"><i style="width:30px;height:30px;border-radius:50%;background:#ff2a00"></i><i style="width:30px;height:30px;border-radius:50%;background:#00ff9c"></i><i style="width:30px;height:30px;border-radius:50%;background:#ffc400"></i><i style="width:30px;height:30px;border-radius:50%;background:#7a00ff"></i><i style="width:30px;height:30px;border-radius:50%;background:#000;outline:1.5px solid #59606b;outline-offset:-1.5px"></i></div>
+          <div class="row"><button class="btn">Убрать цвет</button><span class="sp"></span><button class="btn pri">Готово</button></div>
         </div>
       </div>
     </section>
 
     <section class="scr">
-      <div class="cap"><b>5. Лента и цвета</b><span>Лента полосой из сегментов. Нажал сегмент - под полосой его роль, число точек, направление и свой цвет.</span></div>
+      <div class="cap"><b>5. Лента и цвета</b><span>Лента полосой из сегментов. Нажал сегмент - его цвет, точки, роль, направление. Свои шаблоны: сохранить и применить к другому шлему.</span></div>
       <div class="ph" style="padding-bottom:72px">
         <div class="bar"><span class="back">‹</span><span class="t">Лента и цвета</span></div>
         <div class="card">
           <div class="row"><span class="mute">Плата → по кругу</span><span class="sp"></span><span class="num">135 точек</span></div>
           <div class="tape"><i style="flex:15;background:#dfe6f0">15</i><i style="flex:40;background:#0080ff;outline:2px solid #fff;outline-offset:-2px">40</i><i style="flex:25;background:#ff6b6b">25</i><i style="flex:40;background:#c2383c">40</i><i style="flex:15;background:#c8d0dc">15</i></div>
-          <div class="row mute"><span>лоб справа</span><span class="sp"></span><span>затылок</span><span class="sp"></span><span>лоб слева</span></div>
+          <div class="row mute"><span>перед справа</span><span class="sp"></span><span>зад</span><span class="sp"></span><span>перед слева</span></div>
         </div>
         <div class="card">
           <div class="row"><b>2. Бок справа</b><span class="sp"></span><span class="mute">нажми полосу</span></div>
           <div class="seg on"><i style="background:#0080ff"></i><span>Свой цвет</span><span class="mute">синий ›</span></div>
           <div class="seg"><i style="background:#2a2f37"></i><span>Точек</span><span class="step"><em>−</em><span class="num">40</span><em>+</em></span></div>
           <div class="seg"><i style="background:#2a2f37"></i><span>Роль</span><span class="mute">Бок справа ›</span></div>
-          <div class="seg"><i style="background:#2a2f37"></i><span>Идёт от затылка ко лбу</span><span class="sw off"></span></div>
+          <div class="seg"><i style="background:#2a2f37"></i><span>Идёт сзади вперёд</span><span class="sw off"></span></div>
         </div>
-        <div class="row"><button class="btn">+ Сегмент</button><button class="btn">Шаблон</button><span class="sp"></span><button class="btn">Тип ленты</button></div>
+        <div class="card"><div class="row"><b>Шаблоны</b><span class="sp"></span><button class="btn">Сохранить как шаблон</button></div>
+          <div class="row"><span class="pill">Интеграл</span><span class="pill">Мотокросс</span><span class="pill" style="background:#ff8a2a33;color:var(--a-amber)">Мой LS2 470</span><span class="pill" style="background:#ff8a2a33;color:var(--a-amber)">HJC синий</span></div></div>
+        <div class="row"><button class="btn">+ Сегмент</button><span class="sp"></span><button class="btn">Тип ленты</button></div>
         <div class="save">Записать в шлем<span>сегмент 2 синий</span>→</div>
       </div>
     </section>
@@ -221,7 +223,7 @@ p{margin:0;max-width:68ch}
         <div class="bar"><span class="back">‹</span><span class="t">Стоп и сигналы</span></div>
         <div class="modes" id="modes"></div>
         <div class="lbl" style="color:var(--a-mute)">Что моргает</div>
-        <div class="seg3"><span class="on">Бока и затылок</span><span>Затылок</span><span>Полоса стопа</span></div>
+        <div class="seg3"><span class="on">Бока и зад</span><span>Зад</span><span>Полоса стопа</span></div>
         <div class="sl"><div class="row"><span>Частота</span><span class="sp"></span><span class="num">4 Гц</span></div><div class="tr"><b style="width:33%"></b></div></div>
         <div class="card" style="grid-template-columns:1fr auto;align-items:center"><div><b>Когда считать стопом</b><div class="mute">замедление 5 км/ч/с · наклон 2,5°</div></div><span class="mute">›</span></div>
         <div class="card" style="grid-template-columns:1fr auto;align-items:center"><div><b>Повороты и предупреждение</b><div class="mute">гаснет через 15 с · PWM 85%</div></div><span class="mute">›</span></div>
@@ -306,27 +308,27 @@ Android-приложение для себя, не на продажу. Это �
 - Цвет 1 и Цвет 2 - две большие кнопки с образцом цвета, по нажатию окно выбора цвета.
 - Скорость бега 25-250 % (100 - как задумано).
 - Яркость эффекта 10-255.
-- Перед белый (вкл/выкл), Затылок всегда красный (вкл/выкл).
+- Перед белый (вкл/выкл), Зад всегда красный (вкл/выкл).
 - Пояснение: стоп, повороты и предупреждения всегда поверх эффекта.
 
 4.4. Выбор цвета (одно окно для всех цветов приложения)
-- Палитра 16-18 цветов, обязательно чёрный (с обводкой, чтобы был виден на тёмном) и белый.
-- Свой цвет: квадрат насыщенность-яркость и полоса оттенка, рядом образец и код.
-- Последние выбранные цвета.
-- Для цвета сегмента ещё два варианта: «Как у роли» (цвет по назначению сегмента) и «Не горит».
+- Готовой палитры НЕТ: цвет всегда свой. Главное место в окне - большой квадрат насыщенность-яркость и полоса оттенка (чёрный и белый получаются в углах квадрата), рядом образец и код цвета.
+- Недавние цвета (последние 8-10) - одна строка кружков.
+- Кнопка «Убрать цвет»: у сегмента возвращает цвет по роли, у эффекта - цвет по умолчанию.
 - Кнопка «Готово». Шлем сверху сразу показывает выбранный цвет.
 
 4.5. Лента и цвета
-- Лента одной полосой, поделённой на сегменты пропорционально числу точек, подписи «лоб справа, затылок, лоб слева». Всего точек.
-- До 8 сегментов. У сегмента: роль (Перед справа, Бок справа, Зад, Бок слева, Перед слева, Стоп-полоса, Козырёк справа и слева, у колеса Ходовой, Габарит, Педаль справа и слева, Не светит), число точек (кнопки -10, -1, +1, +10), направление «идёт от затылка ко лбу», свой цвет, переставить выше, удалить.
+- Лента одной полосой, поделённой на сегменты пропорционально числу точек, подписи «перед справа, зад, перед слева». Всего точек.
+- До 8 сегментов. У сегмента: роль (Перед справа, Бок справа, Зад, Бок слева, Перед слева, Стоп-полоса, Козырёк справа и слева, у колеса Ходовой, Габарит, Педаль справа и слева, Не светит), число точек (кнопки -10, -1, +1, +10), направление «идёт сзади вперёд», свой цвет, переставить выше, удалить.
 - Нажатый сегмент мигает на настоящем шлеме - так находят, где он.
-- «+ Сегмент», «Шаблон» (интеграл, мотокросс, колесо).
+- «+ Сегмент», «Шаблон»: готовые (интеграл, мотокросс, колесо) и свои.
+- «Сохранить как шаблон»: своё имя, сохраняется раскладка ленты (сегменты, точки, роли, направления, свои цвета). Свой шаблон можно применить к другому шлему, переименовать, удалить.
 - Тип ленты: WS2812/WS2815 (GRB), RGB, BRG, SK6812 RGBW (GRBW), RGBW.
 - Режим разметки (каждая 10-я точка горит) - для подсчёта точек.
 
 4.6. Стоп и сигналы
 - Как моргает стоп: Ровно ярче; Вспышки, потом ровно (по умолчанию); Мигает всё время; Мигает при резком; Тройная вспышка. Хорошо бы карточками с мини-анимацией.
-- Что моргает: Бока и затылок, Только затылок, Только полоса стопа.
+- Что моргает: Бока и зад, Только зад, Только полоса стопа.
 - Частота вспышек 1-10 Гц.
 - Резкое торможение 5-25 км/ч в секунду (только для «Мигает при резком»).
 - Свёрнутый блок «Когда считать стопом»: замедление 0-15 км/ч в секунду, наклон назад 0-6 градусов, разгон 0-15 км/ч в секунду, не ниже скорости 0-20 км/ч, сглаживание 50-1000 мс.
@@ -358,6 +360,7 @@ Android-приложение для себя, не на продажу. Это �
 - Пользуются в перчатках и на ходу на остановке: крупные элементы (не меньше 48 dp), быстрые действия одной рукой внизу экрана.
 - Шрифт с хорошей кириллицей. Без эмодзи как значков.
 - Тексты по-русски, короткие, без канцелярита. Длинное тире не использовать, только дефис.
+- Части шлема называть: перед, зад, бок, верх, низ. Не «лоб» и «затылок»: это шлем, а не голова.
 
 6. Чего не делать
 - Не придумывать функций, которых нет в списке выше (это лист настроек реальной прошивки).
@@ -365,7 +368,7 @@ Android-приложение для себя, не на продажу. Это �
 - Не превращать в магазин или соцсеть: это инструмент для себя.
 
 7. Что отдать
-Для каждого направления: 6 экранов телефона (пункт 3), палитру (5-7 цветов с кодами), шрифты, пример плитки, кнопки, переключателя, ползунка и окна выбора цвета. Для одного направления - экран Fold в разложенном виде. Коротко: чем это направление отличается от других.
+Для каждого направления: 6 экранов телефона (пункт 3), цвета оформления (5-7 цветов с кодами), шрифты, пример плитки, кнопки, переключателя, ползунка и окна выбора цвета. Для одного направления - экран Fold в разложенном виде. Коротко: чем это направление отличается от других.
 </div>
   </section>
 </div>
@@ -401,7 +404,7 @@ const fxHtml=FXS.map((f,i)=>`<div class="fx${i===1?' on':''}"><i style="backgrou
 document.getElementById('fxg').innerHTML=fxHtml;
 document.getElementById('fxg2').innerHTML=FXS.map((f,i)=>`<div class="fx${i===2?' on':''}"><i style="background:${f[1]}"></i><span>${f[0]}</span></div>`).join('');
 const PAL=['#ff0000','#ff5a00','#ffa000','#ffe600','#78ff00','#00dc00','#00ff9c','#00c8a0','#00c8ff','#0050ff','#3c00ff','#7a00ff','#c800ff','#ff00a0','#ff3c5a','#ffffff','#808080','#000000'];
-document.getElementById('pal').innerHTML=PAL.map(c=>`<i class="${c==='#000000'?'blk':''}${c==='#00c8ff'?' sel':''}" style="background:${c}" title="${c==='#000000'?'чёрный':''}"></i>`).join('');
+void PAL.map(c=>`<i class="${c==='#000000'?'blk':''}${c==='#00c8ff'?' sel':''}" style="background:${c}" title="${c==='#000000'?'чёрный':''}"></i>`).join('');
 function frame(now){
   const dt=Math.min(0.1,(now-last)/1000);last=now;if(!reduce)phase+=dt*(0.12+24/25);const t=now/1000;
   document.querySelectorAll('canvas[data-v]').forEach(c=>{const k=c.dataset.v,im=imgs[k];if(!im.complete||!im.naturalWidth)return;
